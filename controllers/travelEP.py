@@ -13,7 +13,7 @@ def createTrip():
         postedDate = request.get_json(force=True)
         if tripUserHandler.checkDbConnection():
             logging.info("-----Creating New Trip-----")
-            return jsonify({"Message": tripUserService.createTrip(postedDate['trip'])}), 200
+            return jsonify({"Message": tripUserService.createTrip(postedDate['trip'], postedDate['currencies'])}), 200
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
@@ -30,7 +30,7 @@ def fetchTrips():
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
-        return jsonify({"Error": f"Error fetching all trips{ex}"}), 500
+        return jsonify({"Error": f"Error fetching all trips {ex}"}), 500
     finally:
         logging.info("----Finished fetching all trip-----")
 
@@ -47,7 +47,7 @@ def fetchUsersForTrip():
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
-        return jsonify({"Error": f"Error fetching all users for trip{ex}"}), 500
+        return jsonify({"Error": f"Error fetching all users for trip {ex}"}), 500
     finally:
         logging.info("----Finished fetching users for trip-----")
 
@@ -61,9 +61,23 @@ def addUserToTrip():
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
-        return jsonify({"Error": f"Error adding user to trip{ex}"}), 500
+        return jsonify({"Error": f"Error adding user to trip {ex}"}), 500
     finally:
         logging.info("----Finished adding user to trip-----")
+
+
+def deleteUser():
+    userId = request.args.get('userId')
+    try:
+        if tripUserHandler.checkDbConnection():
+            logging.info("-----Deleting user-----")
+            return jsonify({"Message": tripUserService.deleteUser(userId)}), 200
+        else:
+            return jsonify({"Error": "DB Connection Failed"}), 501
+    except Exception as ex:
+        return jsonify({"Error": f"Error deleting user {ex}"}), 500
+    finally:
+        logging.info("----Finished deleting user-----")
 
 
 # Can add another one to edit the userName
@@ -81,14 +95,14 @@ def fetchExpensesForATrip():
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
-        return jsonify({"Error": f"Error fetching all expenses for trip{ex}"}), 500
+        return jsonify({"Error": f"Error fetching all expenses for trip {ex}"}), 500
     finally:
         logging.info("----Finished fetching expenses for trip-----")
 
 
 # Delete expense for a trip
 def deleteExpenseForTrip():
-    expenseId = request.form.get('expenseId')
+    expenseId = request.args.get('expenseId')
     try:
         if tripUserHandler.checkDbConnection():
             logging.info("-----Deleting expense for a trip-----")
@@ -96,9 +110,9 @@ def deleteExpenseForTrip():
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
-        return jsonify({"Error": f"Error fetching all expenses for trip{ex}"}), 500
+        return jsonify({"Error": f"Error deleting expense for trip {ex}"}), 500
     finally:
-        logging.info("----Finished fetching expenses for trip-----")
+        logging.info("----Finished deleting expense for trip-----")
 
 
 # Add expense for a trip
@@ -116,6 +130,21 @@ def addExpenseForTrip():
         logging.info("----Finished adding expense for trip-----")
 
 
+def editExpenseForTrip():
+    postedData = request.get_json()
+    try:
+        if tripUserHandler.checkDbConnection():
+            logging.info("-----Adding expense for a trip-----")
+            return jsonify({"Message": expenseBalanceService.editExpenseForTrip(postedData['expenseId'],
+                                                                                postedData['body'])}), 200
+        else:
+            return jsonify({"Error": "DB Connection Failed"}), 501
+    except Exception as ex:
+        return jsonify({"Error": f"Error adding expense for trip {ex}"}), 500
+    finally:
+        logging.info("----Finished adding expense for trip-----")
+
+
 # Edit expense for a trip
 
 
@@ -123,14 +152,14 @@ def addExpenseForTrip():
 
 
 def fetchBalancesForATrip():
-    tripId = request.form.get('trip')
+    tripId = request.args.get('trip')
     try:
         if tripUserHandler.checkDbConnection():
-            logging.info("-----Fetching all users for a trip-----")
-            return jsonify({"Message":"Expense added successfully"}), 200
+            logging.info("-----Fetching balance for trip-----")
+            return jsonify({"Message": expenseBalanceService.fetchBalances(tripId)}), 200
         else:
             return jsonify({"Error": "DB Connection Failed"}), 501
     except Exception as ex:
-        return jsonify({"Error": f"Error fetching all users for trip{ex}"}), 500
+        return jsonify({"Error": f"Error fetching balances for trip{ex}"}), 500
     finally:
-        logging.info("----Finished fetching users for trip-----")
+        logging.info("----Finished fetching balances for trip-----")

@@ -1,4 +1,3 @@
-import mysql.connector
 from mysql.connector import pooling, Error
 from util.logger import Logger  # Import the existing logger
 
@@ -39,6 +38,7 @@ class DBConnector:
 
     def execute_query(self, query, params=None):
         connection = self.get_connection()
+        cursor = None
         if connection:
             try:
                 cursor = connection.cursor(dictionary=True)
@@ -65,9 +65,10 @@ class DBConnector:
         except Error as e:
             self.logger.error(f"Error closing connection pool: {e}")
 
+
 db_connector = DBConnector(
-    host="127.0.0.1",
-    user="queryUser1",
-    password="iamvidish",
+    host="",
+    user="",
+    password="",
     pool_size=10
 )

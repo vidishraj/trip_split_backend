@@ -13,27 +13,41 @@ class ExpenseBalanceService:
         expenseId = None
         try:
             splitList: list = expense['splitbw']
-            currencyRate = expense['currencyRate']
             paidBy = expense['paidBy']
             amount = expense['amount']
             description = expense['description']
             date = expense['date']
             tripId = expense['tripId']
-            expenseId = self.Handler.addExpense((date, description, amount, paidBy['userId'], [split['userName'] for split
-                                                                                               in splitList].__str__(), tripId))
+            expenseId = self.Handler.addExpense((date, description, amount, paidBy, [split['userId'] for split
+                                                                                     in splitList].__str__(), tripId))
             for split in splitList:
-                if split['userId'] != paidBy['userId']:
-                    self.Handler.addBalance((tripId, split['userId'], expenseId, 0, split['amount'], currencyRate,
-                                             paidBy['userId']))
-            return
+                if split['userId'] != paidBy:
+                    self.Handler.addBalance((tripId, split['userId'], expenseId, -1 * split['amount'],
+                                             paidBy))
+                else:
+                    self.Handler.addBalance((tripId, split['userId'], expenseId, amount - split['amount'],
+                                             paidBy))
+            return True
         except Exception as ex:
             if expenseId is not None:
                 self.deleteExpenseFromTrip(expenseId)
             logging.error("Error while adding expense", ex)
-            return
+            return False
 
+    def editExpenseForTrip(self, expenseId, editData):
+        return self.Handler.updateExpense(expenseId, editData)
     def fetchExpensesForTrip(self, tripId):
-        return self.Handler.fetchExpForTrip(tripId)
+        return self.Handler.fetchExpForTripJoined(tripId)
 
     def deleteExpenseFromTrip(self, expenseId):
         return self.Handler.deleteExpenseFromTrip(expenseId)
+
+    def fetchBalances(self, tripId):
+        balances = self.Handler.fetchBalances(tripId)
+        userBalance = {}
+        for balance in balances:
+            if userBalance.get(balance['userId']) is None:
+                userBalance[balance['userId']] = balance['amount']
+            else:
+                userBalance[balance['userId']] += balance['amount']
+        return userBalance
