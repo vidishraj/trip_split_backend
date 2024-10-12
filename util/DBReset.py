@@ -1,5 +1,8 @@
 import mysql.connector
 from util.db_connector import db_connector
+from util.logger import Logger
+
+logging = Logger().get_logger()
 
 
 class DBReset:
@@ -14,11 +17,14 @@ class DBReset:
     def checkDbConnection(self):
         try:
             if self._dbConnection.is_connected():
+                logging.error("Connected to db")
                 return True
             else:
+                logging.error("Connection was dropped, new connection retrieved")
                 self._dbConnection = db_connector.get_connection()
                 # Will manage connection if required in the future
                 return False
-        except:
+        except Exception as ex:
+            print(f"Error while checking db connection status {ex}")
             self._dbConnection = db_connector.get_connection()
             return False

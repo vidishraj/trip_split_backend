@@ -1,5 +1,7 @@
 from dbHandlers.expenseBalanceHandler import ExpenseBalanceHandler
-from util.logger import logging
+from util.logger import Logger
+
+logging = Logger().get_logger()
 
 
 class ExpenseBalanceService:
@@ -36,6 +38,7 @@ class ExpenseBalanceService:
 
     def editExpenseForTrip(self, expenseId, editData):
         return self.Handler.updateExpense(expenseId, editData)
+
     def fetchExpensesForTrip(self, tripId):
         return self.Handler.fetchExpForTripJoined(tripId)
 

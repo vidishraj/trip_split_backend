@@ -1,7 +1,8 @@
 from flask import request, jsonify
 from travelInstances import TravelInstance
-from util.logger import logging
+from util.logger import Logger
 
+logging = Logger().get_logger()
 tripUserHandler = TravelInstance.tripHandler
 tripUserService = TravelInstance.tripUserService
 expenseBalanceHandler = TravelInstance.expenseHandler
