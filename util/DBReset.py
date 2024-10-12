@@ -25,6 +25,6 @@ class DBReset:
                 # Will manage connection if required in the future
                 return False
         except Exception as ex:
-            print(f"Error while checking db connection status {ex}")
+            logging.error(f"Error while checking db connection status {ex}")
             self._dbConnection = db_connector.get_connection()
             return False
