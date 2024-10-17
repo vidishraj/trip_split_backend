@@ -10,6 +10,9 @@ class ExpenseBalanceService:
     def __init__(self, exBlHandler: ExpenseBalanceHandler):
         self.Handler = exBlHandler
 
+    def fetchExpensesForTrip(self, tripId):
+        return self.Handler.fetchExpForTripJoined(tripId)
+
     def addExpenseForTrip(self, expense):
         """ First obj is to insert the expense, then individually call the balance table."""
         expenseId = None
@@ -38,9 +41,6 @@ class ExpenseBalanceService:
 
     def editExpenseForTrip(self, expenseId, editData):
         return self.Handler.updateExpense(expenseId, editData)
-
-    def fetchExpensesForTrip(self, tripId):
-        return self.Handler.fetchExpForTripJoined(tripId)
 
     def deleteExpenseFromTrip(self, expenseId):
         return self.Handler.deleteExpenseFromTrip(expenseId)

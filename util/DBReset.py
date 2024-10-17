@@ -17,7 +17,7 @@ class DBReset:
     def checkDbConnection(self):
         try:
             if self._dbConnection.is_connected():
-                logging.error("Connected to db")
+                logging.info("Connected to db")
                 return True
             else:
                 logging.error("Connection was dropped, new connection retrieved")
