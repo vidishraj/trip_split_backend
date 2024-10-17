@@ -26,7 +26,10 @@ class TripUserService:
 
     def addRequestForTrip(self, tripId, email):
         userId = self.fetchUserIDFromEmail(email)
-        return self.Handler.addRequestForTrip(tripId, userId)
+        # User is already added to trip ignore request.
+        if not self.checkIfUserHasAuthority(userId, tripId):
+            return self.Handler.addRequestForTrip(tripId, userId)
+        return False
 
     def fetchTripRequestForTrip(self, tripId):
         return self.Handler.fetchTripRequestForTrip(tripId)
