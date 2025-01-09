@@ -20,23 +20,31 @@ class ExpenseBalanceService:
             splitList: list = expense['splitbw']
             paidBy = expense['paidBy']
             amount = expense['amount']
-            description = expense['description']
-            date = expense['date']
             tripId = expense['tripId']
-            expenseId = self.Handler.addExpense((date, description, amount, paidBy, [split['userId'] for split
-                                                                                     in splitList].__str__(), tripId))
+            expense['splitbw'] = [split['userId'] for split in expense['splitbw']].__str__()
+            expenseId = self.Handler.addExpense(expense)
             for split in splitList:
                 if split['userId'] != paidBy:
-                    self.Handler.addBalance((tripId, split['userId'], expenseId, -1 * split['amount'],
-                                             paidBy))
+                    self.Handler.addBalance({
+                        "tripId": tripId,
+                        "userId": split['userId'],
+                        "expenseId": expenseId,
+                        "amount": amount,
+                        "borrowedFrom": paidBy,
+                    })
                 else:
-                    self.Handler.addBalance((tripId, split['userId'], expenseId, amount - split['amount'],
-                                             paidBy))
+                    self.Handler.addBalance({
+                            "tripId": tripId,
+                            "userId": split['userId'],
+                            "expenseId": expenseId,
+                            "amount": amount - split['amount'],
+                            "borrowedFrom": paidBy,
+                        })
             return True
         except Exception as ex:
             if expenseId is not None:
                 self.deleteExpenseFromTrip(expenseId)
-            logging.error("Error while adding expense", ex)
+            logging.error(f"Error while adding expense {ex}")
             return False
 
     def editExpenseForTrip(self, expenseId, editData):
