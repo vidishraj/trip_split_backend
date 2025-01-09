@@ -2,3 +2,7 @@ Flask==3.0.3
 Flask-Cors==4.0.1
 firebase-admin
 mysql-connector-python
+
+SQLAlchemy~=1.4.46
+flask_sqlalchemy==3.0.0
+python-dotenv~=1.0.1
