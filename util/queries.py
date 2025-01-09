@@ -1,62 +1,115 @@
 class Queries:
     """ Travel Queries """
 
-    fetchTripsQuery: str = f""" SELECT t.tripIdShared, t.tripTitle, t.currencies FROM `travelSchema_v2`.`trips` as t 
-    JOIN `travelSchema_v2`.`userTrips` as u ON t.tripIdShared = u.tripId WHERE u.userId = %s; """
-    createTripQuery: str = f"INSERT INTO `travelSchema_v2`.`trips` (`tripTitle`, `currencies`, `tripIdShared`) VALUES " \
-                           f"(%s, %s, %s)"
-    insertTripForAdminUser: str = "INSERT INTO `travelSchema_v2`.`users` (`userName`, `tripId`) VALUES (%s, %s)"
-    checkIfUserHasAuth: str = "SELECT COUNT(1) FROM `travelSchema_v2`.`userTrips` WHERE `userId` = %s and " \
-                              "tripId = %s;"
-    checkIfRequestsExists: str = "SELECT COUNT(1) FROM `travelSchema_v2`.`tripRequest` WHERE `userId` = %s and " \
-                                 "tripId = %s;"
-    checkIfIdExists: str = "SELECT COUNT(1) FROM `travelSchema_v2`.`trips` WHERE `tripIdShared` = %s;"
-    fetchIdForEmail: str = "SELECT userId FROM `travelSchema_v2`.`users` WHERE `email` = %s;"
-    connectUserToTrip: str = "INSERT INTO `travelSchema_v2`.`userTrips`(`userId`,`tripId`)VALUES (%s, %s);"
-    registerUserRequest: str = "INSERT INTO `travelSchema_v2`.`tripRequest`(`userId`,`tripId`)VALUES (%s, %s);"
-    deleteRequest: str = "DELETE FROM `travelSchema_v2`.`tripRequest` where userId = %s and tripId = %s;"
-    fetchUsers: str = "select * from travelSchema_v2.users;"
+    fetchTripsQuery: str = """SELECT t.tripIdShared, t.tripTitle, t.currencies 
+    FROM `travelSchema_v2`.`trips` AS t 
+    JOIN `travelSchema_v2`.`userTrips` AS u ON t.tripIdShared = u.tripId 
+    WHERE u.userId = :email;"""
 
-    fetchTripRequestForTrip: str = " Select u.userId, u.userName, u.email from `travelSchema_v2`.`tripRequest` as t " \
-                                   "join `travelSchema_v2`.`users` as u on t.userId = u.userId and t.tripId = %s;"
-    fetchUsersForSpecificTrip: str = "select ut.userId, ut.userName, u.tripId, ut.email  from " \
-                                     "travelSchema_v2.userTrips " \
-                                     "as u join travelSchema_v2.users as ut " \
-                                     "on ut.userId= u.userId where tripId= %s;"
-    createUser: str = "INSERT INTO `travelSchema_v2`.`users`(`userName`,`email`) VALUES ( %s, %s)"
-    # delete user to be only used if no expenses attached
-    deleteUser: str = "DELETE FROM `travelSchema_v2`.`users` where userId = %s;"
-    checkIfUserHasExpenses: str = "SELECT count(*) FROM travelSchema_v2.expenses WHERE JSON_CONTAINS( expenseSplitBw, " \
-                                  "%s,'$') or expensePaidBy=%s; "
-    updateUserName: str = "Update `travelSchema_v2`.`users` Set userName = %s where userId = %s;"
+    createTripQuery: str = """INSERT INTO `travelSchema_v2`.`trips` 
+    (`tripTitle`, `currencies`, `tripIdShared`) 
+    VALUES (:tripTitle, :currencies, :tripIdShared);"""
 
-    insertExpense: str = "INSERT INTO `travelSchema_v2`.`expenses` (`expenseDate`,`expenseDesc`," \
-                         "`expenseAmount`,`expensePaidBy`,`expenseSplitBw`,`tripId`) VALUES" \
-                         "(%s, %s, %s, %s, %s, %s)"
-    fetchExpenses: str = "select * from `travelSchema_v2`.`expenses`;"
-    fetchExpensesFromTrip: str = "select * from `travelSchema_v2`.`expenses` where tripId = %s;"
-    fetchExpensesFromTripJoined: str = "select e.expenseId, e.expenseDate, e.expenseDesc, e.expenseAmount, " \
-                                       "e.expensePaidBy, e.expenseSplitBw, b.tripId, b.userId, b.amount, " \
-                                       "b.borrowedFrom from `travelSchema_v2`.`expenses` as e join " \
-                                       "`travelSchema_v2`.`Balance` as b  on  e.expenseId=b.expenseId where e.tripId = " \
-                                       "%s; "
-    fetchExpensesPaidByUserInTrip: str = "select * from `travelSchema_v2`.`expenses` where expensePaidBy = %s and " \
-                                         "tripId " \
-                                         "= %s; "
-    # No updating expense. Just delete and reinsert new details.
-    deleteExpense: str = "Delete from `travelSchema_v2`.`expenses` where expenseId = %s;"
+    insertTripForAdminUser: str = """INSERT INTO `travelSchema_v2`.`users` 
+    (`userName`, `tripId`) 
+    VALUES (:userName, :tripId);"""
 
-    updateExpense: str = "UPDATE `travelSchema_v2`.`expenses` SET `expenseDate` = %s,`expenseDesc` = %s," \
-                         "`expenseAmount` = %s,`expensePaidBy` = %s,`expenseSplitBw` = %s WHERE " \
-                         "`expenseId` = %s;"
+    checkIfUserHasAuth: str = """SELECT COUNT(1) 
+    FROM `travelSchema_v2`.`userTrips` 
+    WHERE `userId` = :userId AND `tripId` = :tripId;"""
 
-    # Update on individual attributes can be handles dynamically. Everything should be edittable.
-    # Trigger complete update if amount, paidBy or splitBw is changed. Else build query.
+    checkIfRequestsExists: str = """SELECT COUNT(1) 
+    FROM `travelSchema_v2`.`tripRequest` 
+    WHERE `userId` = :userId AND `tripId` = :tripId;"""
 
-    createBalance = "INSERT INTO `travelSchema_v2`.`Balance` (`tripId`,`userId`,`expenseId`,`amount`," \
-                    " borrowedFrom) VALUES(%s, %s, %s, %s, %s);"
-    fetchBalance: str = "Select * from `travelSchema_v2`.`Balance`;"
-    fetchBalanceFromTrip: str = "Select * from `travelSchema_v2`.`Balance` where tripId = %s"
-    fetchBalanceForUserFromTrip: str = "Select * from `travelSchema_v2`.`Balance` where userId = %s and tripId = %s;"
-    # Might be not necessary cause of cascade?
-    deleteBalance = "delete from `travelSchema_v2`.`Balance` where tripId = %s and expenseId = %s;"
+    checkIfIdExists: str = """SELECT COUNT(1) 
+    FROM `travelSchema_v2`.`trips` 
+    WHERE `tripIdShared` = :tripIdShared;"""
+
+    fetchIdForEmail: str = """SELECT userId 
+    FROM `travelSchema_v2`.`users` 
+    WHERE `email` = :email;"""
+
+    connectUserToTrip: str = """INSERT INTO `travelSchema_v2`.`userTrips`
+    (`userId`, `tripId`) 
+    VALUES (:userId, :tripId);"""
+
+    registerUserRequest: str = """INSERT INTO `travelSchema_v2`.`tripRequest`
+    (`userId`, `tripId`) 
+    VALUES (:userId, :tripId);"""
+
+    deleteRequest: str = """DELETE FROM `travelSchema_v2`.`tripRequest` 
+    WHERE `userId` = :userId AND `tripId` = :tripId;"""
+
+    fetchUsers: str = "SELECT * FROM `travelSchema_v2`.`users`;"
+
+    fetchTripRequestForTrip: str = """SELECT u.userId, u.userName, u.email 
+    FROM `travelSchema_v2`.`tripRequest` AS t 
+    JOIN `travelSchema_v2`.`users` AS u ON t.userId = u.userId 
+    WHERE t.tripId = :tripId;"""
+
+    fetchUsersForSpecificTrip: str = """SELECT ut.userId, ut.userName, u.tripId, ut.email 
+    FROM `travelSchema_v2`.`userTrips` AS u 
+    JOIN `travelSchema_v2`.`users` AS ut ON ut.userId = u.userId 
+    WHERE u.tripId = :tripId;"""
+
+    createUser: str = """INSERT INTO `travelSchema_v2`.`users`
+    (`userName`, `email`) 
+    VALUES (:userName, :email);"""
+
+    deleteUser: str = """DELETE FROM `travelSchema_v2`.`users` 
+    WHERE `userId` = :userId;"""
+
+    checkIfUserHasExpenses: str = """SELECT COUNT(*) 
+    FROM `travelSchema_v2`.`expenses` 
+    WHERE JSON_CONTAINS(`expenseSplitBw`, :userId, '$') OR `expensePaidBy` = :userId;"""
+
+    updateUserName: str = """UPDATE `travelSchema_v2`.`users` 
+    SET `userName` = :userName 
+    WHERE `userId` = :userId;"""
+
+    insertExpense: str = """INSERT INTO `travelSchema_v2`.`expenses` 
+    (`expenseDate`, `expenseDesc`, `expenseAmount`, `expensePaidBy`, `expenseSplitBw`, `tripId`) 
+    VALUES (:expenseDate, :expenseDesc, :expenseAmount, :expensePaidBy, :expenseSplitBw, :tripId);"""
+
+    fetchExpenses: str = "SELECT * FROM `travelSchema_v2`.`expenses`;"
+
+    fetchExpensesFromTrip: str = """SELECT * 
+    FROM `travelSchema_v2`.`expenses` 
+    WHERE `tripId` = :tripId;"""
+
+    fetchExpensesFromTripJoined: str = """SELECT e.expenseId, e.expenseDate, e.expenseDesc, e.expenseAmount, 
+    e.expensePaidBy, e.expenseSplitBw, b.tripId, b.userId, b.amount, b.borrowedFrom 
+    FROM `travelSchema_v2`.`expenses` AS e 
+    JOIN `travelSchema_v2`.`Balance` AS b ON e.expenseId = b.expenseId 
+    WHERE e.tripId = :tripId;"""
+
+    fetchExpensesPaidByUserInTrip: str = """SELECT * 
+    FROM `travelSchema_v2`.`expenses` 
+    WHERE `expensePaidBy` = :userId AND `tripId` = :tripId;"""
+
+    deleteExpense: str = """DELETE FROM `travelSchema_v2`.`expenses` 
+    WHERE `expenseId` = :expenseId;"""
+
+    updateExpense: str = """UPDATE `travelSchema_v2`.`expenses` 
+    SET `expenseDate` = :expenseDate, `expenseDesc` = :expenseDesc, 
+    `expenseAmount` = :expenseAmount, `expensePaidBy` = :expensePaidBy, 
+    `expenseSplitBw` = :expenseSplitBw 
+    WHERE `expenseId` = :expenseId;"""
+
+    createBalance: str = """INSERT INTO `travelSchema_v2`.`Balance` 
+    (`tripId`, `userId`, `expenseId`, `amount`, `borrowedFrom`) 
+    VALUES (:tripId, :userId, :expenseId, :amount, :borrowedFrom);"""
+
+    fetchBalance: str = "SELECT * FROM `travelSchema_v2`.`Balance`;"
+
+    fetchBalanceFromTrip: str = """SELECT * 
+    FROM `travelSchema_v2`.`Balance` 
+    WHERE `tripId` = :tripId;"""
+
+    fetchBalanceForUserFromTrip: str = """SELECT * 
+    FROM `travelSchema_v2`.`Balance` 
+    WHERE `userId` = :userId AND `tripId` = :tripId;"""
+
+    deleteBalance: str = """DELETE FROM `travelSchema_v2`.`Balance` 
+    WHERE `tripId` = :tripId AND `expenseId` = :expenseId;"""
