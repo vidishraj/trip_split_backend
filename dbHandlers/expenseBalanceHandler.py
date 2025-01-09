@@ -1,101 +1,89 @@
-from util.DBReset import DBReset
+from sqlalchemy import text
+
 from util.queries import Queries
+from sqlalchemy.orm import sessionmaker, scoped_session
+
+from flask_sqlalchemy import SQLAlchemy
 
 
-class ExpenseBalanceHandler(DBReset):
+class ExpenseBalanceHandler:
 
-    def __init__(self, dbConnection):
+    def __init__(self, dbConnection: SQLAlchemy):
         super().__init__()
-        self._dbConnection = dbConnection
+        self._dbSession = scoped_session(sessionmaker(autocommit=False,
+                                                      autoflush=False,
+                                                      bind=dbConnection.engine))
 
     def addBalance(self, balance):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.createBalance, tuple(balance))
-        self._dbConnection.commit()
-        cursor.close()
+        self._dbSession.execute(text(Queries.createBalance), balance)
+        self._dbSession.commit()
 
     def addExpense(self, expense):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.insertExpense, expense)
-        self._dbConnection.commit()
-        lastId = cursor.lastrowid
-        cursor.close()
-        return lastId
+        result = self._dbSession.execute(text(Queries.insertExpense), {
+            'expenseDate': expense['date'],
+            'expenseDesc': expense['description'],
+            'expenseAmount': expense['amount'],
+            'expensePaidBy': expense['paidBy'],
+            'expenseSplitBw': expense['splitbw'],
+            'tripId': expense['tripId'],
+
+        })
+        self._dbSession.commit()
+        return result.lastrowid
 
     def fetchExpForTrip(self, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchExpensesFromTrip, tuple([tripId]))
-        expenses = cursor.fetchall()
-        result = []
+        result = self._dbSession.execute(text(Queries.fetchExpensesFromTrip), {'tripId': tripId})
         keys = ['expenseId', 'date', 'expenseDesc', 'amount', 'paidBy', 'splitBetween', 'tripId']
-        for expense in expenses:
-            result.append({keys[i]: value for i, value in enumerate(expense)})
-        cursor.close()
-        return result
+        return [{keys[i]: value for i, value in enumerate(expense)} for expense in result.fetchall()]
 
     def fetchExpForTripJoined(self, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchExpensesFromTripJoined, tuple([tripId]))
-        expenses = cursor.fetchall()
-        result = []
+        result = self._dbSession.execute(text(Queries.fetchExpensesFromTripJoined), {'tripId': tripId})
         keys = ['expenseId', 'date', 'expenseDesc', 'expenseAmount', 'paidBy', 'splitBetween', 'tripId', 'userId',
-                'amount','borrowedFrom']
-        for expense in expenses:
-            result.append({keys[i]: value for i, value in enumerate(expense)})
-        cursor.close()
+                'amount', 'borrowedFrom']
+        expenses = [{keys[i]: value for i, value in enumerate(expense)} for expense in result.fetchall()]
+
         combinedResult = {}
-        for expense in result:
-            if combinedResult.get(f"{expense['tripId']}_{expense['expenseId']}") is None:
-                combinedResult[f"{expense['tripId']}_{expense['expenseId']}"] = {
+        for expense in expenses:
+            combined_key = f"{expense['tripId']}_{expense['expenseId']}"
+            if combined_key not in combinedResult:
+                combinedResult[combined_key] = {
                     'expenseId': expense['expenseId'],
                     'date': expense['date'],
                     'expenseDesc': expense['expenseDesc'],
                     'amount': expense['expenseAmount'],
                     'paidBy': expense['paidBy'],
                     'tripId': expense['tripId'],
-                    'splitBetween': {
-                        expense['userId']: expense['amount']
-                    },
+                    'splitBetween': {expense['userId']: expense['amount']}
                 }
             else:
-                combinedResult[f"{expense['tripId']}_{expense['expenseId']}"]['splitBetween'][expense['userId']] = \
-                    expense['amount']
+                combinedResult[combined_key]['splitBetween'][expense['userId']] = expense['amount']
+
         return list(combinedResult.values())
 
     def deleteExpenseFromTrip(self, expenseId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.deleteExpense, tuple([expenseId]))
-        self._dbConnection.commit()
-        cursor.close()
+        self._dbSession.execute(text(Queries.deleteExpense), {'expenseId': expenseId})
+        self._dbSession.commit()
         return True
 
     def updateExpense(self, expenseId, tripData):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        splitList: list = tripData['splitbw']
-        cursor.execute(Queries.updateExpense, tuple([tripData['date'], tripData['description'], tripData['amount'],
-                                                     tripData['paidBy'],
-                                                     [split['userId'] for split in splitList].__str__(), expenseId]))
-        rowCount = cursor.rowcount
-        self._dbConnection.commit()
-        cursor.close()
-        if rowCount > 0:
-            return True
-        return False
+        splitList = tripData['splitbw']
+        split_user_ids = [split['userId'] for split in splitList]
+        updated_values = {
+            'expenseDate': tripData['date'],
+            'expenseDesc': tripData['description'],
+            'expenseAmount': tripData['amount'],
+            'expensePaidBy': tripData['paidBy'],
+            'expenseSplitBw': str(split_user_ids),
+            'expenseId': expenseId
+        }
+        self._dbSession.execute(text(Queries.updateExpense), updated_values)
+        self._dbSession.commit()
+
+        # Check if any row was updated
+        rowCount = self._dbSession.rowcount
+        return rowCount > 0
 
     def fetchBalances(self, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchBalanceFromTrip, tuple([tripId]))
-        balances = cursor.fetchall()
-        result = []
+        result = self._dbSession.execute(text(Queries.fetchBalanceFromTrip), {'tripId': tripId})
         keys = ['tripId', 'userId', 'expenseId', 'amount', 'borrowedFrom']
-        for balance in balances:
-            result.append({keys[i]: value for i, value in enumerate(balance)})
-        cursor.close()
-        return result
+        return [{keys[i]: value for i, value in enumerate(balance)} for balance in result.fetchall()]

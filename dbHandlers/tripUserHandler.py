@@ -1,145 +1,219 @@
-from util.DBReset import DBReset
+from sqlalchemy import text
 from util.queries import Queries
 from mysql.connector import Error
 from util.logger import Logger
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import sessionmaker, scoped_session
 
 
-class TripUserHandler(DBReset):
+class TripUserHandler:
 
-    def __init__(self, dbConnection):
+    def __init__(self, dbConnection: SQLAlchemy):
         super().__init__()
-        self._dbConnection = dbConnection
+        self._dbConnection = scoped_session(sessionmaker(autocommit=False,
+                                                         autoflush=False,
+                                                         bind=dbConnection.engine))
         self.logging = Logger().get_logger()
 
     def insertTrip(self, tripData, currencies, generatedId, userId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.createTripQuery, tuple([tripData, currencies, generatedId]))
-        self.connectUserToTrip(userId, generatedId)
-        self._dbConnection.commit()
-        cursor.close()
+        try:
+            self._dbConnection.execute(text(Queries.createTripQuery), {
+                'tripTitle': tripData,
+                'currencies': currencies,
+                'tripIdShared': generatedId
+            })
+            self.connectUserToTrip(userId, generatedId)
+            self._dbConnection.commit()
+        except Error as e:
+            self._dbConnection.rollback()
+            self.logging.error(f"Error inserting trip: {e}")
+            return False
+        finally:
+            self._dbConnection.close()
         return True
 
     def connectUserToTrip(self, userId, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.connectUserToTrip, tuple([userId, tripId]))
-        return
+        try:
+            self._dbConnection.execute(text(Queries.connectUserToTrip), {
+                'userId': userId,
+                'tripId': tripId
+            })
+            self._dbConnection.commit()
+        except Error as e:
+            self._dbConnection.rollback()
+            self.logging.error(f"Error connecting user to trip: {e}")
+        finally:
+            self._dbConnection.close()
 
     def fetchIdFromEmail(self, email):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchIdForEmail, tuple([email]))
-        users = cursor.fetchall()
-        return users[0][0]
+        try:
+            result = self._dbConnection.execute(text(
+                "SELECT userId FROM `travelSchema_v2`.`users` WHERE `email` = :email "), {'email': email})
+            user = result.fetchone()
+            return user[0] if user else None
+        except Error as e:
+            self.logging.error(f"Error fetching user ID from email: {e}")
+            return None
+        finally:
+            self._dbConnection.close()
 
     def createUser(self, userName, email):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.createUser, tuple([userName, email]))
-        self._dbConnection.commit()
-        cursor.close()
+        try:
+            self._dbConnection.execute(text(Queries.createUser), {
+                'userName': userName,
+                'email': email
+            })
+            self._dbConnection.commit()
+        except Error as e:
+            self._dbConnection.rollback()
+            self.logging.error(f"Error creating user: {e}")
+            return False
+        finally:
+            self._dbConnection.close()
         return True
 
     def checkIfTripIdExists(self, generatedId: str):
         try:
-            cursor = self._dbConnection.cursor()
-            cursor.execute(Queries.checkIfIdExists, (generatedId,))
-            result = cursor.fetchone()
-            return result[0] > 0
+            result = self._dbConnection.execute(text(Queries.checkIfIdExists), {
+                'tripIdShared': generatedId
+            })
+            count = result.fetchone()[0]
+            return count > 0
         except Error as e:
-            self.logging.error(f"Error while checking ID existence: {e}")
+            self.logging.error(f"Error checking if trip ID exists: {e}")
             return False
+        finally:
+            self._dbConnection.close()
 
     def requestExists(self, userId, tripId):
         try:
-            cursor = self._dbConnection.cursor()
-            cursor.execute(Queries.checkIfRequestsExists, (userId, tripId))
-            result = cursor.fetchone()
-            return result[0] > 0
+            result = self._dbConnection.execute(text(Queries.checkIfRequestsExists), {
+                'userId': userId,
+                'tripId': tripId
+            })
+            count = result.fetchone()[0]
+            return count > 0
         except Error as e:
-            self.logging.error(f"Error while checking request existence: {e}")
+            self.logging.error(f"Error checking if request exists: {e}")
             return False
+        finally:
+            self._dbConnection.close()
 
     def fetchAllTrips(self, userEmail):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchTripsQuery, tuple([userEmail]))
-        trips = cursor.fetchall()
-        result = []
-        keys = ['tripIdShared', 'tripTitle', 'currencies']
-        for trip in trips:
-            result.append({keys[i]: value for i, value in enumerate(trip)})
-        cursor.close()
-        return result
+        try:
+            result = self._dbConnection.execute(text(Queries.fetchTripsQuery), {'email': userEmail})
+            trips = result.fetchall()
+            keys = ['tripIdShared', 'tripTitle', 'currencies']
+            return [{keys[i]: value for i, value in enumerate(trip)} for trip in trips]
+        except Error as e:
+            self.logging.error(f"Error fetching all trips: {e}")
+            return []
+        finally:
+            self._dbConnection.close()
 
     def fetchUsersForTrip(self, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchUsersForSpecificTrip, tuple([tripId]))
-        users = cursor.fetchall()
-        result = []
-        keys = ['userId', 'userName', 'tripId', 'email']
-        for user in users:
-            result.append({keys[i]: value for i, value in enumerate(user)})
-            result[-1]['deletable'] = not self.checkIfUserHasExpenses(str(user[0]))
-        cursor.close()
-        return result
+        try:
+            result = self._dbConnection.execute(text(Queries.fetchUsersForSpecificTrip), {
+                'tripId': tripId
+            })
+            users = result.fetchall()
+            keys = ['userId', 'userName', 'tripId', 'email']
+            return [
+                {**{keys[i]: value for i, value in enumerate(user)},
+                 'deletable': not self.checkIfUserHasExpenses(str(user[0]))}
+                for user in users
+            ]
+        except Error as e:
+            self.logging.error(f"Error fetching users for trip: {e}")
+            return []
+        finally:
+            self._dbConnection.close()
 
     def userHasAuthority(self, userId, tripId):
         try:
-            cursor = self._dbConnection.cursor()
-            cursor.execute(Queries.checkIfUserHasAuth, tuple([userId, tripId]))
-            result = cursor.fetchone()
-            return result[0] > 0
+            result = self._dbConnection.execute(text(Queries.checkIfUserHasAuth), {
+                'userId': userId,
+                'tripId': tripId
+            })
+            count = result.fetchone()[0]
+            return count > 0
         except Error as e:
-            self.logging.error(f"Error while checking ID existence: {e}")
+            self.logging.error(f"Error checking user authority: {e}")
             return False
+        finally:
+            self._dbConnection.close()
 
     def fetchTripRequestForTrip(self, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.fetchTripRequestForTrip, tuple([tripId]))
-        users = cursor.fetchall()
-        result = []
-        keys = ['userId', 'userName', 'email']
-        for user in users:
-            result.append({keys[i]: value for i, value in enumerate(user)})
-            result[-1]['deletable'] = not self.checkIfUserHasExpenses(str(user[0]))
-        cursor.close()
-        return result
-
+        try:
+            result = self._dbConnection.execute(text(Queries.fetchTripRequestForTrip), {
+                'tripId': tripId
+            })
+            users = result.fetchall()
+            keys = ['userId', 'userName', 'email']
+            return [
+                {**{keys[i]: value for i, value in enumerate(user)},
+                 'deletable': not self.checkIfUserHasExpenses(str(user[0]))}
+                for user in users
+            ]
+        except Error as e:
+            self.logging.error(f"Error fetching trip request for trip: {e}")
+            return []
+        finally:
+            self._dbConnection.close()
 
     def addRequestForTrip(self, tripId, userId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.registerUserRequest, tuple([userId, tripId]))
-        self._dbConnection.commit()
-        cursor.close()
+        try:
+            self._dbConnection.execute(text(Queries.registerUserRequest), {
+                'userId': userId,
+                'tripId': tripId
+            })
+            self._dbConnection.commit()
+        except Error as e:
+            self._dbConnection.rollback()
+            self.logging.error(f"Error adding request for trip: {e}")
+            return False
+        finally:
+            self._dbConnection.close()
         return True
 
     def deleteRequest(self, userId, tripId):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.deleteRequest, tuple([userId, tripId]))
-        self._dbConnection.commit()
-        cursor.close()
+        try:
+            self._dbConnection.execute(text(Queries.deleteRequest), {
+                'userId': userId,
+                'tripId': tripId
+            })
+            self._dbConnection.commit()
+        except Error as e:
+            self._dbConnection.rollback()
+            self.logging.error(f"Error deleting request: {e}")
+            return False
+        finally:
+            self._dbConnection.close()
         return True
 
     def checkIfUserHasExpenses(self, user):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.checkIfUserHasExpenses, (user, user))
-        count = cursor.fetchall()[0][0]
-        cursor.close()
-        if count > 0:
-            return True
-        return False
+        try:
+            result = self._dbConnection.execute(text(Queries.checkIfUserHasExpenses), {
+                'userId': user
+            })
+            count = result.fetchone()[0]
+            return count > 0
+        except Error as e:
+            self.logging.error(f"Error checking if user has expenses: {e}")
+            return False
+        finally:
+            self._dbConnection.close()
 
     def deleteUser(self, user):
-        self._dbConnection.commit()
-        cursor = self._dbConnection.cursor()
-        cursor.execute(Queries.deleteUser, tuple([user]))
-        self._dbConnection.commit()
-        cursor.close()
+        try:
+            self._dbConnection.execute(text(Queries.deleteUser), {
+                'userId': user
+            })
+            self._dbConnection.commit()
+        except Error as e:
+            self._dbConnection.rollback()
+            self.logging.error(f"Error deleting user: {e}")
+            return False
+        finally:
+            self._dbConnection.close()
         return True
