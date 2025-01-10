@@ -46,6 +46,7 @@ class FlaskApp(Flask):
         """Set up configuration."""
         self.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
         self.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        self.config['SQLALCHEMY_POOL_RECYCLE'] = 300
 
     def _setup_instances(self):
         """Initialize application instances."""
@@ -125,4 +126,4 @@ class FlaskApp(Flask):
 
 flaskappRunner = FlaskApp(__name__)
 flask_app = flaskappRunner.app
-flaskappRunner.run_app()
+#flaskappRunner.run_app()
