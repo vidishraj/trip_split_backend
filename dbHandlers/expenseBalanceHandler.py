@@ -1,89 +1,152 @@
 from sqlalchemy import text
 
+from models import Balance, Expense
 from util.queries import Queries
 from sqlalchemy.orm import sessionmaker, scoped_session
 
+from flask import g
 from flask_sqlalchemy import SQLAlchemy
 
 
 class ExpenseBalanceHandler:
+    @property
+    def _dbSession(self):
+        return g.db
 
-    def __init__(self, dbConnection: SQLAlchemy):
+    def __init__(self):
         super().__init__()
-        self._dbSession = scoped_session(sessionmaker(autocommit=False,
-                                                      autoflush=False,
-                                                      bind=dbConnection.engine))
+        # self._dbSession = g.get('db')
 
     def addBalance(self, balance):
-        self._dbSession.execute(text(Queries.createBalance), balance)
-        self._dbSession.commit()
+        balance = Balance(
+            tripId=balance['tripId'],
+            userId=balance['userId'],
+            expenseId=balance['expenseId'],
+            amount=balance['amount'],
+            borrowedFrom=balance['borrowedFrom']
+        )
+        self._dbSession.session.add(balance)
+        self._dbSession.session.commit()
 
     def addExpense(self, expense):
-        result = self._dbSession.execute(text(Queries.insertExpense), {
-            'expenseDate': expense['date'],
-            'expenseDesc': expense['description'],
-            'expenseAmount': expense['amount'],
-            'expensePaidBy': expense['paidBy'],
-            'expenseSplitBw': expense['splitbw'],
-            'tripId': expense['tripId'],
-
-        })
-        self._dbSession.commit()
-        return result.lastrowid
+        expense = Expense(
+            expenseDate=expense['date'],
+            expenseDesc=expense['description'],
+            expenseAmount=expense['amount'],
+            expensePaidBy=expense['paidBy'],
+            expenseSplitBw=expense['splitbw'],
+            tripId=expense['tripId']
+        )
+        self._dbSession.session.add(expense)
+        self._dbSession.session.commit()
+        return expense.expenseId
 
     def fetchExpForTrip(self, tripId):
-        result = self._dbSession.execute(text(Queries.fetchExpensesFromTrip), {'tripId': tripId})
-        keys = ['expenseId', 'date', 'expenseDesc', 'amount', 'paidBy', 'splitBetween', 'tripId']
-        return [{keys[i]: value for i, value in enumerate(expense)} for expense in result.fetchall()]
+        result = Expense.query.filter_by(tripId=tripId).all()
+        return [
+            {
+                'expenseId': expense.expenseId,
+                'date': expense.date,
+                'expenseDesc': expense.expenseDesc,
+                'amount': expense.amount,
+                'paidBy': expense.paidBy,
+                'splitBetween': expense.splitBetween,
+                'tripId': expense.tripId,
+            }
+            for expense in result
+        ]
 
     def fetchExpForTripJoined(self, tripId):
-        result = self._dbSession.execute(text(Queries.fetchExpensesFromTripJoined), {'tripId': tripId})
-        keys = ['expenseId', 'date', 'expenseDesc', 'expenseAmount', 'paidBy', 'splitBetween', 'tripId', 'userId',
-                'amount', 'borrowedFrom']
-        expenses = [{keys[i]: value for i, value in enumerate(expense)} for expense in result.fetchall()]
+        result = (
+            self._dbSession.session.query(
+                Expense.expenseId,
+                Expense.expenseDate,
+                Expense.expenseDesc,
+                Expense.expenseAmount,
+                Expense.expensePaidBy,
+                Balance.tripId,
+                Balance.userId,
+                Balance.amount,
+                Balance.borrowedFrom,
+            )
+            .join(Balance, Expense.expenseId == Balance.expenseId)
+            .filter(Expense.tripId == tripId)
+            .all()
+        )
 
-        combinedResult = {}
+        # Map results to dictionaries
+        expenses = [
+        {
+            'expenseId': row.expenseId,
+            'date': row.expenseDate,
+            'expenseDesc': row.expenseDesc,
+            'amount': row.expenseAmount,
+            'paidBy': row.expensePaidBy,
+            'tripId': row.tripId,
+            'userId': row.userId,
+            'splitAmount': row.amount,
+            'borrowedFrom': row.borrowedFrom,
+        }
+        for row in result
+    ]
+
+        # Combine results by expenseId and tripId
+        combined_result = {}
         for expense in expenses:
             combined_key = f"{expense['tripId']}_{expense['expenseId']}"
-            if combined_key not in combinedResult:
-                combinedResult[combined_key] = {
+            if combined_key not in combined_result:
+                combined_result[combined_key] = {
                     'expenseId': expense['expenseId'],
                     'date': expense['date'],
                     'expenseDesc': expense['expenseDesc'],
-                    'amount': expense['expenseAmount'],
+                    'amount': expense['amount'],
                     'paidBy': expense['paidBy'],
                     'tripId': expense['tripId'],
-                    'splitBetween': {expense['userId']: expense['amount']}
+                    'splitBetween': {expense['userId']: expense['splitAmount']}
                 }
             else:
-                combinedResult[combined_key]['splitBetween'][expense['userId']] = expense['amount']
+                combined_result[combined_key]['splitBetween'][expense['userId']] = expense['splitAmount']
 
-        return list(combinedResult.values())
+        return list(combined_result.values())
 
     def deleteExpenseFromTrip(self, expenseId):
-        self._dbSession.execute(text(Queries.deleteExpense), {'expenseId': expenseId})
-        self._dbSession.commit()
+        Expense.query.filter_by(expenseId=expenseId).delete()
+        self._dbSession.session.commit()
         return True
 
     def updateExpense(self, expenseId, tripData):
-        splitList = tripData['splitbw']
-        split_user_ids = [split['userId'] for split in splitList]
-        updated_values = {
-            'expenseDate': tripData['date'],
-            'expenseDesc': tripData['description'],
-            'expenseAmount': tripData['amount'],
-            'expensePaidBy': tripData['paidBy'],
-            'expenseSplitBw': str(split_user_ids),
-            'expenseId': expenseId
-        }
-        self._dbSession.execute(text(Queries.updateExpense), updated_values)
+        split_list = tripData['splitbw']
+        split_user_ids = [split['userId'] for split in split_list]
+
+        # Fetch the expense to update
+        expense = self._dbSession.query(Expense).filter_by(expenseId=expenseId).first()
+
+        if not expense:
+            # If no expense found, return False
+            return False
+
+        # Update the expense fields
+        expense.expenseDate = tripData['date']
+        expense.expenseDesc = tripData['description']
+        expense.expenseAmount = tripData['amount']
+        expense.expensePaidBy = tripData['paidBy']
+        expense.expenseSplitBw = str(split_user_ids)
+
+        # Commit changes to the database
         self._dbSession.commit()
 
-        # Check if any row was updated
-        rowCount = self._dbSession.rowcount
-        return rowCount > 0
+        # Return True if the update was successful
+        return True
 
     def fetchBalances(self, tripId):
-        result = self._dbSession.execute(text(Queries.fetchBalanceFromTrip), {'tripId': tripId})
-        keys = ['tripId', 'userId', 'expenseId', 'amount', 'borrowedFrom']
-        return [{keys[i]: value for i, value in enumerate(balance)} for balance in result.fetchall()]
+        result = self._dbSession.session.query(Balance).filter_by(tripId=tripId).all()
+        return [
+            {
+                'tripId': balance.tripId,
+                'userId': balance.userId,
+                'expenseId': balance.expenseId,
+                'amount': balance.amount,
+                'borrowedFrom': balance.borrowedFrom,
+            }
+            for balance in result
+        ]
