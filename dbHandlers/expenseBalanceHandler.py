@@ -1,11 +1,5 @@
-from sqlalchemy import text
-
 from models import Balance, Expense
-from util.queries import Queries
-from sqlalchemy.orm import sessionmaker, scoped_session
-
 from flask import g
-from flask_sqlalchemy import SQLAlchemy
 
 
 class ExpenseBalanceHandler:

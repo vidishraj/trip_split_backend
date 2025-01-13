@@ -1,11 +1,8 @@
-from sqlalchemy import text, func
+from sqlalchemy import func
 
 from models import Trip, UserTrip, User, TripRequest, Expense
-from util.queries import Queries
 from mysql.connector import Error
 from util.logger import Logger
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import sessionmaker, scoped_session
 
 from flask import g
 
