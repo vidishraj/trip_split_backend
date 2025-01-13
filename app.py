@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask
+from flask import Flask, g
 
 from controllers.travelEP import TravelEP
 from dbHandlers.expenseBalanceHandler import ExpenseBalanceHandler
@@ -28,7 +28,7 @@ class FlaskApp(Flask):
     def __init__(self, import_name: str):
         load_dotenv()
         super().__init__(import_name)
-        self.app = Flask(__name__)
+        self.app = self.app_context().app
         self.logger = Logger().get_logger()
         CORS(self.app)
         self._setup_config()
@@ -40,6 +40,7 @@ class FlaskApp(Flask):
         firebase_admin.initialize_app(cred)
 
         self.setup_routes()
+        self._setup_hooks()
         self.logger.info("Finished setting up routes...")
 
     def _setup_config(self):
@@ -50,12 +51,18 @@ class FlaskApp(Flask):
 
     def _setup_instances(self):
         """Initialize application instances."""
-        with self.app_context():
-            tripUserHandler = TripUserHandler(self.db)
-            expenseBalanceHandler = ExpenseBalanceHandler(self.db)
-            tripUserService = TripUserService(tripUserHandler)
-            expenseBalanceService = ExpenseBalanceService(expenseBalanceHandler)
-            self.travelEP = TravelEP(tripUserService, expenseBalanceService)
+        tripUserHandler = TripUserHandler()
+        expenseBalanceHandler = ExpenseBalanceHandler()
+        tripUserService = TripUserService(tripUserHandler)
+        expenseBalanceService = ExpenseBalanceService(expenseBalanceHandler)
+        self.travelEP = TravelEP(tripUserService, expenseBalanceService)
+
+    def _setup_hooks(self):
+        """Set up request and teardown hooks."""
+        @self.before_request
+        def _set_db_on_request():
+            """Attach the database session to the request context."""
+            g.db = self.db
 
     def _setup_database(self):
         """Set up database connection and create tables."""
