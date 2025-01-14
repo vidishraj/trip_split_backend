@@ -113,7 +113,7 @@ class ExpenseBalanceHandler:
         split_user_ids = [split['userId'] for split in split_list]
 
         # Fetch the expense to update
-        expense = self._dbSession.query(Expense).filter_by(expenseId=expenseId).first()
+        expense = self._dbSession.session.query(Expense).filter_by(expenseId=expenseId).first()
 
         if not expense:
             # If no expense found, return False
@@ -127,7 +127,7 @@ class ExpenseBalanceHandler:
         expense.expenseSplitBw = str(split_user_ids)
 
         # Commit changes to the database
-        self._dbSession.commit()
+        self._dbSession.session.commit()
 
         # Return True if the update was successful
         return True
