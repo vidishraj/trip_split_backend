@@ -205,7 +205,7 @@ class TravelEP:
                 id_token = auth_header.split(' ')[1]
                 decoded_token = auth.verify_id_token(id_token)
                 user_email = decoded_token.get('email')
-                if self.tripUserService.checkIfUserHasAuthority(user_email, postedData['tripId']):
+                if self.tripUserService.checkIfUserHasAuthority(user_email, postedData['body']['tripId']):
                     self.logging.info("-----Updating expense for a trip-----")
                     return jsonify({"Message": self.expenseBalanceService.editExpenseForTrip(postedData['expenseId'],
                                                                                              postedData['body'])}), 200
