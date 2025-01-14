@@ -70,19 +70,19 @@ class ExpenseBalanceHandler:
 
         # Map results to dictionaries
         expenses = [
-        {
-            'expenseId': row.expenseId,
-            'date': row.expenseDate,
-            'expenseDesc': row.expenseDesc,
-            'amount': row.expenseAmount,
-            'paidBy': row.expensePaidBy,
-            'tripId': row.tripId,
-            'userId': row.userId,
-            'splitAmount': row.amount,
-            'borrowedFrom': row.borrowedFrom,
-        }
-        for row in result
-    ]
+            {
+                'expenseId': row.expenseId,
+                'date': row.expenseDate,
+                'expenseDesc': row.expenseDesc,
+                'amount': row.expenseAmount,
+                'paidBy': row.expensePaidBy,
+                'tripId': row.tripId,
+                'userId': row.userId,
+                'splitAmount': row.amount,
+                'borrowedFrom': row.borrowedFrom,
+            }
+            for row in result
+        ]
 
         # Combine results by expenseId and tripId
         combined_result = {}
@@ -131,6 +131,15 @@ class ExpenseBalanceHandler:
 
         # Return True if the update was successful
         return True
+
+    def fetchSelfTransactions(self, userid):
+        result = self._dbSession.session.query(Balance).filter(Balance.userId == userid).filter(Balance.userId == Balance.borrowedFrom).filter(Balance.amount < 0).all()
+        return [
+            {
+                'amount': balance.amount
+            }
+            for balance in result
+        ]
 
     def fetchBalances(self, tripId):
         result = self._dbSession.session.query(Balance).filter_by(tripId=tripId).all()

@@ -14,7 +14,11 @@ class ExpenseBalanceService:
         return self.Handler.fetchExpForTripJoined(tripId)
 
     def addExpenseForTrip(self, expense):
-        """ First obj is to insert the expense, then individually call the balance table."""
+        """
+        First obj is to insert the expense, then individually call the balance table.
+        Three cases to consider-: Person paying is involved in the split, the person paying is not involved in split
+        ONLY the person paying is involved in split (self-expense)
+        """
         expenseId = None
         try:
             splitList: list = expense['splitbw']
@@ -23,23 +27,47 @@ class ExpenseBalanceService:
             tripId = expense['tripId']
             expense['splitbw'] = [split['userId'] for split in expense['splitbw']].__str__()
             expenseId = self.Handler.addExpense(expense)
-            for split in splitList:
-                if split['userId'] != paidBy:
-                    self.Handler.addBalance({
-                        "tripId": tripId,
-                        "userId": split['userId'],
-                        "expenseId": expenseId,
-                        "amount": amount,
-                        "borrowedFrom": paidBy,
-                    })
-                else:
-                    self.Handler.addBalance({
+            personIncludedInSplit = False
+            # Case 3
+            if len(splitList) == 1 and splitList[0]['userId'] == paidBy:
+                personIncludedInSplit = True
+                self.Handler.addBalance({
+                    "tripId": tripId,
+                    "userId": paidBy,
+                    "expenseId": expenseId,
+                    "amount": -1 * amount,
+                    "borrowedFrom": paidBy,
+                })
+            # Case 1
+            else:
+                for split in splitList:
+                    if split['userId'] != paidBy:
+                        self.Handler.addBalance({
+                            "tripId": tripId,
+                            "userId": split['userId'],
+                            "expenseId": expenseId,
+                            "amount": -1 * split['amount'],
+                            "borrowedFrom": paidBy,
+                        })
+                    else:
+                        personIncludedInSplit = True
+                        self.Handler.addBalance({
                             "tripId": tripId,
                             "userId": split['userId'],
                             "expenseId": expenseId,
                             "amount": amount - split['amount'],
                             "borrowedFrom": paidBy,
                         })
+            # Case 2
+            if not personIncludedInSplit:
+                self.Handler.addBalance({
+                    "tripId": tripId,
+                    "userId": paidBy,
+                    "expenseId": expenseId,
+                    "amount": amount,
+                    "borrowedFrom": paidBy,
+                })
+
             return True
         except Exception as ex:
             if expenseId is not None:
@@ -58,7 +86,16 @@ class ExpenseBalanceService:
         userBalance = {}
         for balance in balances:
             if userBalance.get(balance['userId']) is None:
-                userBalance[balance['userId']] = balance['amount']
+                userBalance[balance['userId']] = {}
+                userBalance[balance['userId']]['amount'] = balance['amount']
             else:
-                userBalance[balance['userId']] += balance['amount']
+                userBalance[balance['userId']]['amount'] += balance['amount']
+        for userId in list(userBalance.keys()):
+            selfTransaction = self.Handler.fetchSelfTransactions(userId)
+            if len(selfTransaction) > 0:
+                amount = selfTransaction[0]['amount']
+                userBalance[userId]['amount'] += (-1*amount)
+                userBalance[userId]['selfTransaction'] = amount
+            else:
+                userBalance[userId]['selfTransaction'] = 0
         return userBalance
