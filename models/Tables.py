@@ -34,7 +34,7 @@ class Expense(Base):
     expenseAmount = Column(Float, nullable=False)
     expensePaidBy = Column(Integer, ForeignKey('users.userId', ondelete='CASCADE'), nullable=False)
     expenseSplitBw = Column(String(2000), nullable=False)
-    tripId = Column(String(6), ForeignKey('trips.tripIdShared'), nullable=False)
+    tripId = Column(String(6), ForeignKey('trips.tripIdShared', ondelete='CASCADE'), nullable=False)
 
     def __repr__(self):
         return f"<Expense {self.expenseDesc}>"
@@ -43,9 +43,10 @@ class Expense(Base):
 class Balance(Base):
     __tablename__ = 'Balance'
 
-    tripId = Column(String(6), ForeignKey('trips.tripIdShared'), primary_key=True)
+    balanceId = Column(Integer, primary_key=True, autoincrement=True)
+    tripId = Column(String(6), ForeignKey('trips.tripIdShared', ondelete='CASCADE'), primary_key=True)
     userId = Column(Integer, ForeignKey('users.userId'), primary_key=True)
-    expenseId = Column(Integer, ForeignKey('expenses.expenseId'), primary_key=True)
+    expenseId = Column(Integer, ForeignKey('expenses.expenseId', ondelete='CASCADE'), primary_key=True)
     amount = Column(Float, nullable=False)
     borrowedFrom = Column(Integer, ForeignKey('users.userId'), nullable=True)
 
@@ -56,8 +57,8 @@ class Balance(Base):
 class TripRequest(Base):
     __tablename__ = 'tripRequest'
 
-    tripId = Column(String(6), ForeignKey('trips.tripIdShared'), primary_key=True)
-    userId = Column(Integer, ForeignKey('users.userId'), primary_key=True)
+    tripId = Column(String(6), ForeignKey('trips.tripIdShared', ondelete='CASCADE'), primary_key=True)
+    userId = Column(Integer, ForeignKey('users.userId', ondelete='CASCADE'), primary_key=True)
 
     def __repr__(self):
         return f"<TripRequest tripId={self.tripId} userId={self.userId}>"
@@ -66,8 +67,8 @@ class TripRequest(Base):
 class UserTrip(Base):
     __tablename__ = 'userTrips'
 
-    userId = Column(Integer, ForeignKey('users.userId'), primary_key=True)
-    tripId = Column(String(6), ForeignKey('trips.tripIdShared'), primary_key=True)
+    userId = Column(Integer, ForeignKey('users.userId', ondelete='CASCADE'), primary_key=True)
+    tripId = Column(String(6), ForeignKey('trips.tripIdShared', ondelete='CASCADE'), primary_key=True)
 
     def __repr__(self):
         return f"<UserTrip userId={self.userId} tripId={self.tripId}>"
