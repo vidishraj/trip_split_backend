@@ -145,9 +145,11 @@ class ExpenseBalanceHandler:
     def fetchSelfTransactions(self, userid):
         result = self._dbSession.session.query(Balance).filter(Balance.userId == userid).filter(
             Balance.userId == Balance.borrowedFrom).filter(Balance.amount < 0).all()
+
+        total_amount = sum(balance.amount for balance in result)
         return [
             {
-                'amount': balance.amount
+                'amount': total_amount
             }
             for balance in result
         ]
