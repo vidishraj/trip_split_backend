@@ -67,6 +67,22 @@ class TripUserHandler:
             self.logging.error(f"Error creating user: {e}")
             return False
 
+    def editTripTitle(self, title, tripId):
+        try:
+            # Fetch the expense to update
+            trip = self._dbConnection.session.query(Trip).filter_by(tripIdShared=tripId).first()
+
+            if not trip:
+                # If no expense found, return False
+                return False
+            trip.tripTitle = title
+            self._dbConnection.session.commit()
+            return True
+        except Error as e:
+            self._dbConnection.session.rollback()
+            self.logging.error(f"Error updating trip title: {e}")
+            return False
+
     def checkIfTripIdExists(self, generatedId: str):
         try:
             count = self._dbConnection.session.query(self._dbConnection.func.count(Trip.tripIdShared)). \

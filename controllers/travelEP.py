@@ -51,6 +51,27 @@ class TravelEP:
         finally:
             self.logging.info("----Finished fetching trips-----")
 
+    # Edit trip title
+    def editTripTitle(self):
+        postedData = request.get_json()
+        try:
+            auth_header = request.headers.get('Authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                if self.tripUserService.checkIfUserHasAuthority(user_email, postedData['tripId']):
+                    self.logging.info("-----Updating title for a trip-----")
+                    return jsonify({"Message": self.tripUserService.editTripTitle(postedData['title'],
+                                                                                  postedData['tripId'])}), 200
+                else:
+                    return jsonify({"Error": "User does not has Auth."}), 501
+
+        except Exception as ex:
+            return jsonify({"Error": f"Error updating title for trip {ex}"}), 500
+        finally:
+            self.logging.info("----Finished updating title for trip-----")
+
     """ User EPs """
 
     def createUser(self):

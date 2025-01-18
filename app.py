@@ -108,6 +108,7 @@ class FlaskApp(Flask):
     def setup_routes(self):
         # Trip EPS
         self.app.add_url_rule('/createTrip', methods=['POST'], view_func=self.travelEP.createTrip)
+        self.app.add_url_rule('/editTripTitle', methods=['POST'], view_func=self.travelEP.editTripTitle)
         self.app.add_url_rule('/fetchTrips', methods=['GET'], view_func=self.travelEP.fetchTrips)
         # User based EPS
         self.app.add_url_rule('/createUser', methods=['POST'], view_func=self.travelEP.createUser)

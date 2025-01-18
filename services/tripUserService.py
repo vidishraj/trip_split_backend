@@ -21,6 +21,9 @@ class TripUserService:
         userId = self.fetchUserIDFromEmail(userEmail)
         return self.Handler.fetchAllTrips(userId)
 
+    def editTripTitle(self, title, tripId):
+        return self.Handler.editTripTitle(title, tripId)
+
     def createUser(self, userName: str, email: str):
         return self.Handler.createUser(userName, email)
 
