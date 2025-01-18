@@ -126,6 +126,16 @@ class ExpenseBalanceHandler:
         expense.expensePaidBy = tripData['paidBy']
         expense.expenseSplitBw = str(split_user_ids)
 
+        for index, user in enumerate(split_user_ids):
+            balance: Balance = self._dbSession.session.query(Balance).filter_by(expenseId=expenseId).filter_by(
+                userId=user).first()
+            if not balance:
+                # If no balance found, return False
+                return False
+            if balance.userId != expense.expensePaidBy:
+                balance.amount = -1 * split_list[index]['amount']
+            else:
+                balance.amount = expense.expenseAmount-split_list[index]['amount']
         # Commit changes to the database
         self._dbSession.session.commit()
 
@@ -133,7 +143,8 @@ class ExpenseBalanceHandler:
         return True
 
     def fetchSelfTransactions(self, userid):
-        result = self._dbSession.session.query(Balance).filter(Balance.userId == userid).filter(Balance.userId == Balance.borrowedFrom).filter(Balance.amount < 0).all()
+        result = self._dbSession.session.query(Balance).filter(Balance.userId == userid).filter(
+            Balance.userId == Balance.borrowedFrom).filter(Balance.amount < 0).all()
         return [
             {
                 'amount': balance.amount
