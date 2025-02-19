@@ -250,3 +250,26 @@ class TripUserHandler:
             self._dbConnection.session.rollback()
             self.logging.error(f"Error deleting user: {e}")
             return False
+
+    def deleteTrip(self, tripId):
+        try:
+            self._dbConnection.session.query(Trip).filter(
+                Trip.tripIdShared == tripId
+            ).delete()
+            self._dbConnection.session.commit()
+            return True
+        except Error as e:
+            self._dbConnection.session.rollback()
+            self.logging.error(f"Error deleting trip: {e}")
+            return False
+
+    def tripHasExpenses(self, tripId):
+        try:
+            count = self._dbConnection.session.query(self._dbConnection.func.count(Expense.tripId)). \
+                filter_by(tripId=tripId).scalar()
+            return count > 0
+        except Error as e:
+            self._dbConnection.session.rollback()
+            self.logging.error(f"Error checking if trip has expenses: {e}")
+            # Prevent deletion on error if trip exists
+            return True

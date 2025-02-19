@@ -12,8 +12,8 @@ class TravelEP:
 
     def createTrip(self):
         self.logging.info("----New Sign up. Adding Use to DB-----")
+        postedDate = request.get_json()
         try:
-            postedDate = request.get_json(force=True)
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -27,6 +27,29 @@ class TravelEP:
                         {"Message": self.tripUserService.createTrip(postedDate['trip'], postedDate['currencies'],
                                                                     user_email)}), \
                         200
+            else:
+                return jsonify({"Error": " Auth failed"}), 501
+        except Exception as ex:
+            self.logging.error(f"Error inserting user during sign up {ex}")
+            return jsonify({"Error": f"Error inserting user during sign up {ex}"}), 500
+        finally:
+            self.logging.info("----Finished adding new user during sign up-----")
+
+    def deleteTrip(self):
+        self.logging.info("----Starting trip deletion-----")
+        tripId = request.args.get('tripId')
+        try:
+            auth_header = request.headers.get('Authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                self.logging.info(f"Fetched email. Adding user with email {user_email}")
+                if self.tripUserService.tripHasExpenses(tripId):
+                    return jsonify({"Error": " Trip has expenses attached. Cannot delete it."}), 401
+                if user_email:
+                    return jsonify(
+                        {"Message": self.tripUserService.deleteTrip(tripId)}), 200
             else:
                 return jsonify({"Error": " Auth failed"}), 501
         except Exception as ex:

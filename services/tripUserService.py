@@ -70,6 +70,14 @@ class TripUserService:
     def tripWithSameNameExists(self, tripTitle, userEmail):
         return self.Handler.tripWithSameNameExists(tripTitle, userEmail)
 
+    def tripHasExpenses(self, tripId):
+        if self.Handler.tripHasExpenses(tripId):
+            return True
+        return False
+
+    def deleteTrip(self, tripId):
+        return self.Handler.deleteTrip(tripId)
+
     @staticmethod
     def generate_unique_id(length=6):
         characters = string.ascii_letters + string.digits
