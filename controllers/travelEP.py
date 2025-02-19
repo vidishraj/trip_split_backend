@@ -121,6 +121,8 @@ class TravelEP:
                 user_email = decoded_token.get('email')
                 tripId = postedData['tripId']
                 self.logging.info(f"-----Adding request for trip {tripId} {user_email}-----")
+                if not self.tripUserService.tripIdExists(tripId):
+                    return jsonify({"Error": "Trip does not exist. Check id!"}), 401
                 return jsonify({"Message": self.tripUserService.addRequestForTrip(tripId, user_email)}), 200
 
         except Exception as ex:
