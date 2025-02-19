@@ -12,8 +12,8 @@ class TravelEP:
 
     def createTrip(self):
         self.logging.info("----New Sign up. Adding Use to DB-----")
-        postedDate = request.get_json()
         try:
+            postedDate = request.get_json()
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -37,8 +37,8 @@ class TravelEP:
 
     def deleteTrip(self):
         self.logging.info("----Starting trip deletion-----")
-        tripId = request.args.get('tripId')
         try:
+            tripId = request.args.get('tripId')
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -78,8 +78,8 @@ class TravelEP:
 
     # Edit trip title
     def editTripTitle(self):
-        postedData = request.get_json()
         try:
+            postedData = request.get_json()
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -91,6 +91,8 @@ class TravelEP:
                                                                                   postedData['tripId'])}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
 
         except Exception as ex:
             return jsonify({"Error": f"Error updating title for trip {ex}"}), 500
@@ -112,8 +114,8 @@ class TravelEP:
             self.logging.info("----Finished creating new user-----")
 
     def setUserRequest(self):
-        postedData = request.get_json(force=True)
         try:
+            postedData = request.get_json(force=True)
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -124,15 +126,16 @@ class TravelEP:
                 if not self.tripUserService.tripIdExists(tripId):
                     return jsonify({"Error": "Trip does not exist. Check id!"}), 401
                 return jsonify({"Message": self.tripUserService.addRequestForTrip(tripId, user_email)}), 200
-
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error adding request for user to trip {ex}"}), 500
         finally:
             self.logging.info("----Finished adding request for user to trip-----")
 
     def fetchTripRequestForTrip(self):
-        tripId = request.args.get('trip')
         try:
+            tripId = request.args.get('trip')
             self.logging.info("-----Fetching all trip requests for a trip-----")
             return jsonify({"Message": self.tripUserService.fetchTripRequestForTrip(tripId)}), 200
         except Exception as ex:
@@ -141,8 +144,8 @@ class TravelEP:
             self.logging.info("----Finished fetching trip requests for trip-----")
 
     def registerRequestResponse(self):
-        postedData = request.get_json(force=True)
         try:
+            postedData = request.get_json(force=True)
             userId = postedData['userId']
             tripId = postedData['tripId']
             auth_header = request.headers.get('Authorization')
@@ -157,14 +160,16 @@ class TravelEP:
                         {"Message": self.tripUserService.registerRequestResponse(userId, tripId, response)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error registering response for trip request {ex}"}), 500
         finally:
             self.logging.info("----Finished registering response for trip request-----")
 
     def fetchUsersForTrip(self):
-        tripId = request.args.get('trip')
         try:
+            tripId = request.args.get('trip')
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -175,15 +180,18 @@ class TravelEP:
                     return jsonify({"Message": self.tripUserService.fetchUserForTrip(tripId)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error fetching all users for trip {ex}"}), 500
         finally:
             self.logging.info("----Finished fetching users for trip-----")
 
     def deleteUser(self):
-        userId = request.args.get('userId')
-        tripId = request.args.get('tripId')
         try:
+            userId = request.args.get('userId')
+            tripId = request.args.get('tripId')
+
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -194,6 +202,8 @@ class TravelEP:
                     return jsonify({"Message": self.tripUserService.deleteUser(userId)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error deleting user {ex}"}), 500
         finally:
@@ -205,8 +215,8 @@ class TravelEP:
 
     # Fetch expense for a trip
     def fetchExpensesForATrip(self):
-        tripId = request.args.get('trip')
         try:
+            tripId = request.args.get('trip')
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -217,7 +227,8 @@ class TravelEP:
                     return jsonify({"Message": self.expenseBalanceService.fetchExpensesForTrip(tripId)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
-
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error fetching all expenses for trip {ex}"}), 500
         finally:
@@ -225,8 +236,8 @@ class TravelEP:
 
     # Add expense for a trip
     def addExpenseForTrip(self):
-        postedData = request.get_json()
         try:
+            postedData = request.get_json()
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -237,7 +248,8 @@ class TravelEP:
                     return jsonify({"Message": self.expenseBalanceService.addExpenseForTrip(postedData)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
-
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error adding expense for trip {ex}"}), 500
         finally:
@@ -245,9 +257,8 @@ class TravelEP:
 
     # Edit expense for a trip
     def editExpenseForTrip(self):
-        postedData = request.get_json()
         try:
-
+            postedData = request.get_json()
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -259,7 +270,8 @@ class TravelEP:
                                                                                              postedData['body'])}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
-
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error updating expense for trip {ex}"}), 500
         finally:
@@ -267,9 +279,9 @@ class TravelEP:
 
     # Delete expense for a trip
     def deleteExpenseForTrip(self):
-        expenseId = request.args.get('expenseId')
-        tripId = request.args.get('tripId')
         try:
+            expenseId = request.args.get('expenseId')
+            tripId = request.args.get('tripId')
 
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
@@ -281,7 +293,8 @@ class TravelEP:
                     return jsonify({"Message": self.expenseBalanceService.deleteExpenseFromTrip(expenseId)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
-
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
         except Exception as ex:
             return jsonify({"Error": f"Error deleting expense for trip {ex}"}), 500
         finally:
@@ -290,9 +303,8 @@ class TravelEP:
     """ Balances EP """
 
     def fetchBalancesForATrip(self):
-        tripId = request.args.get('trip')
         try:
-
+            tripId = request.args.get('trip')
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
@@ -300,9 +312,11 @@ class TravelEP:
                 user_email = decoded_token.get('email')
                 if self.tripUserService.checkIfUserHasAuthority(user_email, tripId):
                     self.logging.info("-----Fetching balance for trip-----")
-                    return jsonify({"Message": self.expenseBalanceService.fetchBalances(tripId)}), 200
+                    return jsonify({"Message": self.expenseBalanceService.fetchBalanceV2(tripId)}), 200
                 else:
                     return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
 
         except Exception as ex:
             return jsonify({"Error": f"Error fetching balances for trip{ex}"}), 500
