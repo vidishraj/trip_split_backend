@@ -101,12 +101,12 @@ class TripUserHandler:
             self.logging.error(f"Error checking if request exists: {e}")
             return False
 
-    def fetchAllTrips(self, userEmail):
+    def fetchAllTrips(self, userId):
         try:
             trips = (
                 self._dbConnection.session.query(Trip.tripIdShared, Trip.tripTitle, Trip.currencies)
                 .join(UserTrip, Trip.tripIdShared == UserTrip.tripId)
-                .filter(UserTrip.userId == userEmail)
+                .filter(UserTrip.userId == userId)
                 .all()
             )
             return [
