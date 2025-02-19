@@ -1,3 +1,6 @@
+import heapq
+from collections import defaultdict
+
 from dbHandlers.expenseBalanceHandler import ExpenseBalanceHandler
 from util.logger import Logger
 
@@ -25,21 +28,14 @@ class ExpenseBalanceService:
             paidBy = expense['paidBy']
             amount = expense['amount']
             tripId = expense['tripId']
+            selfExpense = expense['selfExpense']
             expense['splitbw'] = [split['userId'] for split in expense['splitbw']].__str__()
             expenseId = self.Handler.addExpense(expense)
             personIncludedInSplit = False
             # Case 3
-            if len(splitList) == 1 and splitList[0]['userId'] == paidBy:
-                personIncludedInSplit = True
-                self.Handler.addBalance({
-                    "tripId": tripId,
-                    "userId": paidBy,
-                    "expenseId": expenseId,
-                    "amount": -1 * amount,
-                    "borrowedFrom": paidBy,
-                })
+
             # Case 1
-            else:
+            if selfExpense == 0:
                 for split in splitList:
                     if split['userId'] != paidBy:
                         self.Handler.addBalance({
@@ -58,6 +54,7 @@ class ExpenseBalanceService:
                             "amount": amount - split['amount'],
                             "borrowedFrom": paidBy,
                         })
+
             # Case 2
             if not personIncludedInSplit:
                 self.Handler.addBalance({
@@ -81,21 +78,60 @@ class ExpenseBalanceService:
     def deleteExpenseFromTrip(self, expenseId):
         return self.Handler.deleteExpenseFromTrip(expenseId)
 
-    def fetchBalances(self, tripId):
+    # def fetchBalances(self, tripId):
+    #     balances = self.Handler.fetchBalances(tripId)
+    #     userBalance = {}
+    #     for balance in balances:
+    #         if userBalance.get(balance['userId']) is None:
+    #             userBalance[balance['userId']] = {}
+    #             userBalance[balance['userId']]['amount'] = balance['amount']
+    #         else:
+    #             userBalance[balance['userId']]['amount'] += balance['amount']
+    #     for userId in list(userBalance.keys()):
+    #         selfTransaction = self.Handler.fetchSelfTransactions(userId)
+    #         if len(selfTransaction) > 0:
+    #             amount = selfTransaction[0]['amount']
+    #             userBalance[userId]['amount'] += (-1 * amount)
+    #             userBalance[userId]['selfTransaction'] = amount
+    #         else:
+    #             userBalance[userId]['selfTransaction'] = 0
+    #     return userBalance
+
+    def fetchBalanceV2(self, tripId):
+        # Fetch all Balances for a trip
         balances = self.Handler.fetchBalances(tripId)
-        userBalance = {}
+        response = []
+        # Create net user owed dict
+        userOwedDict = defaultdict(int)
         for balance in balances:
-            if userBalance.get(balance['userId']) is None:
-                userBalance[balance['userId']] = {}
-                userBalance[balance['userId']]['amount'] = balance['amount']
-            else:
-                userBalance[balance['userId']]['amount'] += balance['amount']
-        for userId in list(userBalance.keys()):
-            selfTransaction = self.Handler.fetchSelfTransactions(userId)
-            if len(selfTransaction) > 0:
-                amount = selfTransaction[0]['amount']
-                userBalance[userId]['amount'] += (-1*amount)
-                userBalance[userId]['selfTransaction'] = amount
-            else:
-                userBalance[userId]['selfTransaction'] = 0
-        return userBalance
+            if balance['expenseId'] not in [40, 41, 14]:
+                userOwedDict[balance['userId']] += balance['amount']
+
+        # We will use two heaps. One heap for user who owe money and one for user who are owed money
+        userIds = list(userOwedDict.keys())
+
+        # max heap
+        usersOwedMoney = [tuple([-1 * userOwedDict[userId], userId]) for userId in userIds if userOwedDict[userId] > 0]
+        userOweMoney = [tuple([userOwedDict[userId], userId]) for userId in userIds if userOwedDict[userId] < 0]
+
+        # Max Heap
+        heapq.heapify(usersOwedMoney)
+        # Min Heap
+        heapq.heapify(userOweMoney)
+
+        # We reduce till there people who need to pay people money (Negative values)
+        while len(userOweMoney) > 0:
+            # Our goal is to map transactions of max owed to max owe.
+            highestOweMoney, userIdPayee = heapq.heappop(userOweMoney)
+            highestOwedMoney, userIdPaidTo = heapq.heappop(usersOwedMoney)
+            response.append({
+                'from': userIdPayee,
+                'to': userIdPaidTo,
+                'amount': -1 * highestOweMoney
+            })
+            netLeft = -1 * highestOwedMoney + highestOweMoney
+            if netLeft != 0:
+                # Add it back to heap
+                heapq.heappush(usersOwedMoney, tuple([-1 * netLeft, userIdPayee]))
+
+        return response

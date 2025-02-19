@@ -58,6 +58,7 @@ class ExpenseBalanceHandler:
                 Expense.expenseDesc,
                 Expense.expenseAmount,
                 Expense.expensePaidBy,
+                Expense.expenseSelf,
                 Balance.tripId,
                 Balance.userId,
                 Balance.amount,
@@ -118,6 +119,9 @@ class ExpenseBalanceHandler:
         if not expense:
             # If no expense found, return False
             return False
+        if expense.expenseSelf == 0 and tripData['selfExpense'] == 1:
+            # went from split to self, delete all in balances table
+            Balance.query.filter_by(expenseId=expenseId).delete()
 
         # Update the expense fields
         expense.expenseDate = tripData['date']
@@ -125,34 +129,37 @@ class ExpenseBalanceHandler:
         expense.expenseAmount = tripData['amount']
         expense.expensePaidBy = tripData['paidBy']
         expense.expenseSplitBw = str(split_user_ids)
+        expense.expenseSelf = tripData['selfExpense']
 
-        for index, user in enumerate(split_user_ids):
-            balance: Balance = self._dbSession.session.query(Balance).filter_by(expenseId=expenseId).filter_by(
-                userId=user).first()
-            if not balance:
-                # If no balance found, return False
-                return False
-            if balance.userId != expense.expensePaidBy:
-                balance.amount = -1 * split_list[index]['amount']
-            else:
-                balance.amount = expense.expenseAmount-split_list[index]['amount']
+        if tripData['selfExpense'] == 0:
+            # Only need to update balance if it isn't a self expense
+            for index, user in enumerate(split_user_ids):
+                balance: Balance = self._dbSession.session.query(Balance).filter_by(expenseId=expenseId).filter_by(
+                    userId=user).first()
+                if not balance:
+                    # If no balance found, return False
+                    return False
+                if balance.userId != expense.expensePaidBy:
+                    balance.amount = -1 * split_list[index]['amount']
+                else:
+                    balance.amount = expense.expenseAmount - split_list[index]['amount']
         # Commit changes to the database
         self._dbSession.session.commit()
 
         # Return True if the update was successful
         return True
 
-    def fetchSelfTransactions(self, userid):
-        result = self._dbSession.session.query(Balance).filter(Balance.userId == userid).filter(
-            Balance.userId == Balance.borrowedFrom).filter(Balance.amount < 0).all()
-
-        total_amount = sum(balance.amount for balance in result)
-        return [
-            {
-                'amount': total_amount
-            }
-            for balance in result
-        ]
+    # def fetchSelfTransactions(self, userid):
+    #     result = self._dbSession.session.query(Balance).filter(Balance.userId == userid).filter(
+    #         Balance.userId == Balance.borrowedFrom).filter(Balance.amount < 0).all()
+    #
+    #     total_amount = sum(balance.amount for balance in result)
+    #     return [
+    #         {
+    #             'amount': total_amount
+    #         }
+    #         for balance in result
+    #     ]
 
     def fetchBalances(self, tripId):
         result = self._dbSession.session.query(Balance).filter_by(tripId=tripId).all()
