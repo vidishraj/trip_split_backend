@@ -77,6 +77,7 @@ class ExpenseBalanceHandler:
                 'expenseDesc': row.expenseDesc,
                 'amount': row.expenseAmount,
                 'paidBy': row.expensePaidBy,
+                'expenseSelf': row.expenseSelf,
                 'tripId': row.tripId,
                 'userId': row.userId,
                 'splitAmount': row.amount,
@@ -84,7 +85,23 @@ class ExpenseBalanceHandler:
             }
             for row in result
         ]
-
+        selfExpensesInDb = Expense.query.filter_by(expenseSelf=True).all()
+        selfExpenses = [
+            {
+                'expenseId': selfExpense.expenseId,
+                'date': selfExpense.expenseDate,
+                'expenseDesc': selfExpense.expenseDesc,
+                'amount': selfExpense.expenseAmount,
+                'paidBy': selfExpense.expensePaidBy,
+                'expenseSelf': selfExpense.expenseSelf,
+                'tripId': selfExpense.tripId,
+                'userId': selfExpense.expensePaidBy,
+                'splitAmount': 0,
+                'borrowedFrom': selfExpense.expensePaidBy,
+            }
+            for selfExpense in selfExpensesInDb
+        ]
+        expenses += selfExpenses
         # Combine results by expenseId and tripId
         combined_result = {}
         for expense in expenses:
@@ -96,6 +113,7 @@ class ExpenseBalanceHandler:
                     'expenseDesc': expense['expenseDesc'],
                     'amount': expense['amount'],
                     'paidBy': expense['paidBy'],
+                    'selfExpense': expense['expenseSelf'],
                     'tripId': expense['tripId'],
                     'splitBetween': {expense['userId']: expense['splitAmount']}
                 }
