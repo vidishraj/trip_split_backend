@@ -85,7 +85,7 @@ class ExpenseBalanceHandler:
             }
             for row in result
         ]
-        selfExpensesInDb = Expense.query.filter_by(expenseSelf=True).all()
+        selfExpensesInDb = Expense.query.filter_by(expenseSelf=True).filter_by(tripId=tripId).all()
         selfExpenses = [
             {
                 'expenseId': selfExpense.expenseId,
