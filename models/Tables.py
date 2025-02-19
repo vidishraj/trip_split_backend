@@ -1,6 +1,6 @@
 from datetime import datetime
 from models.Base import Base
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Text, create_engine
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Text, create_engine, Boolean
 
 
 class User(Base):
@@ -35,6 +35,7 @@ class Expense(Base):
     expensePaidBy = Column(Integer, ForeignKey('users.userId', ondelete='CASCADE'), nullable=False)
     expenseSplitBw = Column(String(2000), nullable=False)
     tripId = Column(String(6), ForeignKey('trips.tripIdShared', ondelete='CASCADE'), nullable=False)
+    expenseSelf = Column(Boolean, nullable=False, default=0)
 
     def __repr__(self):
         return f"<Expense {self.expenseDesc}>"
