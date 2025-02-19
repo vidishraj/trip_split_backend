@@ -219,6 +219,26 @@ class TripUserHandler:
             self.logging.error(f"Error checking if user has expenses: {e}")
             return False
 
+    def tripWithSameNameExists(self, tripTitle, userEmail):
+        try:
+            # Fetch userId of the user
+            user = self._dbConnection.session.query(User).filter_by(email=userEmail).first()
+            userId = user.userId
+            # Fetch tripIds with same name
+            trips = self._dbConnection.session.query(Trip).filter_by(tripTitle=tripTitle).all()
+            tripIdList = [trip.tripIdShared for trip in trips]
+
+            # Fetch userTrips
+            userTrips = self._dbConnection.session.query(TripRequest).filter_by(userId=userId).all()
+
+            for trip in userTrips:
+                if trip.tripIdShared in tripIdList:
+                    return True
+            return False
+        except Error as e:
+            self.logging.error(f"Error checking if user has expenses: {e}")
+            return False
+
     def deleteUser(self, user):
         try:
             self._dbConnection.session.query(User).filter(

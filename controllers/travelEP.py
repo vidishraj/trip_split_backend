@@ -20,6 +20,8 @@ class TravelEP:
                 decoded_token = auth.verify_id_token(id_token)
                 user_email = decoded_token.get('email')
                 self.logging.info(f"Fetched email. Adding user with email {user_email}")
+                if self.tripUserService.tripWithSameNameExists(user_email, postedDate['trip']):
+                    return jsonify({"Error": " Invalid trip name"}), 401
                 if user_email:
                     return jsonify(
                         {"Message": self.tripUserService.createTrip(postedDate['trip'], postedDate['currencies'],

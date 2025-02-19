@@ -67,6 +67,9 @@ class TripUserService:
     def requestExists(self, userId, tripId):
         return self.Handler.requestExists(userId, tripId)
 
+    def tripWithSameNameExists(self, tripTitle, userEmail):
+        return self.Handler.tripWithSameNameExists(tripTitle, userEmail)
+
     @staticmethod
     def generate_unique_id(length=6):
         characters = string.ascii_letters + string.digits
