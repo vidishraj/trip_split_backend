@@ -35,7 +35,7 @@ class ExpenseBalanceService:
             # Case 3
 
             # Case 1
-            if selfExpense == 0:
+            if not selfExpense:
                 for split in splitList:
                     if split['userId'] != paidBy:
                         self.Handler.addBalance({

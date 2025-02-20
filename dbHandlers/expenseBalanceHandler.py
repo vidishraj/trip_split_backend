@@ -29,7 +29,8 @@ class ExpenseBalanceHandler:
             expenseAmount=expense['amount'],
             expensePaidBy=expense['paidBy'],
             expenseSplitBw=expense['splitbw'],
-            tripId=expense['tripId']
+            tripId=expense['tripId'],
+            expenseSelf=expense['selfExpense']
         )
         self._dbSession.session.add(expense)
         self._dbSession.session.commit()
