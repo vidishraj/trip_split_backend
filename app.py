@@ -4,8 +4,10 @@ from flask import Flask, g
 
 from controllers.travelEP import TravelEP
 from dbHandlers.expenseBalanceHandler import ExpenseBalanceHandler
+from dbHandlers.noteHandler import NotesHandler
 from dbHandlers.tripUserHandler import TripUserHandler
 from services.expenseBalanceService import ExpenseBalanceService
+from services.notesService import NotesService
 from services.tripUserService import TripUserService
 from util.logger import Logger
 from flask_cors import CORS
@@ -53,9 +55,11 @@ class FlaskApp(Flask):
         """Initialize application instances."""
         tripUserHandler = TripUserHandler()
         expenseBalanceHandler = ExpenseBalanceHandler()
+        notesHandler = NotesHandler()
         tripUserService = TripUserService(tripUserHandler)
         expenseBalanceService = ExpenseBalanceService(expenseBalanceHandler)
-        self.travelEP = TravelEP(tripUserService, expenseBalanceService)
+        notesService = NotesService(notesHandler)
+        self.travelEP = TravelEP(tripUserService, expenseBalanceService, notesService)
 
     def _setup_hooks(self):
         """Set up request and teardown hooks."""
@@ -126,6 +130,11 @@ class FlaskApp(Flask):
         self.app.add_url_rule('/deleteExpenses', methods=['GET'], view_func=self.travelEP.deleteExpenseForTrip)
         # Balance based EPS
         self.app.add_url_rule('/fetchBalances', methods=['GET'], view_func=self.travelEP.fetchBalancesForATrip)
+        # Notes based EPS
+        self.app.add_url_rule('/createNote', methods=['POST'], view_func=self.travelEP.createNote)
+        self.app.add_url_rule('/editNote', methods=['PUT'], view_func=self.travelEP.editNote)
+        self.app.add_url_rule('/deleteNote', methods=['DELETE'], view_func=self.travelEP.deleteNote)
+        self.app.add_url_rule('/getNotes', methods=['GET'], view_func=self.travelEP.fetchNotesForATrip)
 
     def run_app(self):
         self.logger.info("Starting Trip Split...")
@@ -135,4 +144,5 @@ class FlaskApp(Flask):
 
 flaskappRunner = FlaskApp(__name__)
 flask_app = flaskappRunner.app
-#flaskappRunner.run_app()
+
+flaskappRunner.run_app()

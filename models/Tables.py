@@ -25,6 +25,18 @@ class Trip(Base):
         return f"<Trip {self.tripTitle}>"
 
 
+class Note(Base):
+    __tablename__ = "notes"
+
+    noteId = Column(Integer, primary_key=True, autoincrement=True)
+    note = Column(Text, nullable=False)
+    userId = Column(Integer, ForeignKey('users.userId', ondelete='CASCADE'), nullable=False)
+    tripId = Column(String(6), ForeignKey('trips.tripIdShared', ondelete='CASCADE'), nullable=False)
+
+    def __repr__(self):
+        return f"<Note {self.note} from trip {self.tripId} and user {self.userId}>"
+
+
 class Expense(Base):
     __tablename__ = 'expenses'
 

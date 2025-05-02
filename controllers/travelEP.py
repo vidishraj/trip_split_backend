@@ -5,10 +5,11 @@ from firebase_admin import auth
 
 class TravelEP:
 
-    def __init__(self, tripUserService, expenseBalanceService):
+    def __init__(self, tripUserService, expenseBalanceService,notesService):
         self.logging = Logger().get_logger()
         self.tripUserService = tripUserService
         self.expenseBalanceService = expenseBalanceService
+        self.notesService = notesService
 
     def createTrip(self):
         self.logging.info("----New Sign up. Adding Use to DB-----")
@@ -322,3 +323,106 @@ class TravelEP:
             return jsonify({"Error": f"Error fetching balances for trip{ex}"}), 500
         finally:
             self.logging.info("----Finished fetching balances for trip-----")
+
+    """ Notes EP """
+
+    def fetchNotesForATrip(self):
+        try:
+            tripId = request.args.get('tripId')
+            page = request.args.get('page')
+            if not tripId and not page:
+                return jsonify({"Error": "Missing request data"}), 401
+            page = int(page)
+            auth_header = request.headers.get('Authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                if self.tripUserService.checkIfUserHasAuthority(user_email, tripId):
+                    self.logging.info("-----Fetching Notes for trip-----")
+                    return jsonify({"Message": self.notesService.fetchNotesForATrip(tripId, page)}), 200
+                else:
+                    return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
+
+        except Exception as ex:
+            return jsonify({"Error": f"Error fetching notes for trip{ex}"}), 500
+        finally:
+            self.logging.info("----Finished fetching notes for trip-----")
+
+    def createNote(self):
+        try:
+            auth_header = request.headers.get('Authorization')
+            postedData = request.get_json()
+            tripId = postedData.get('tripId')
+            if not tripId or postedData is None:
+                return jsonify({"Error": "Missing request data"}), 401
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                userId = self.tripUserService.fetchUserIDFromEmail(user_email)
+                if self.tripUserService.checkIfUserHasAuthority(user_email, tripId):
+                    self.logging.info("-----Creating Note for trip-----")
+                    postedData['userId'] = userId
+                    return jsonify({"Message": self.notesService.createNote(postedData)}), 200
+                else:
+                    return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
+
+        except Exception as ex:
+            return jsonify({"Error": f"Error creating notes for trip{ex}"}), 500
+        finally:
+            self.logging.info("----Finished creating notes for trip-----")
+
+    def editNote(self):
+        try:
+            auth_header = request.headers.get('Authorization')
+            postData = request.get_json()
+            tripId = postData.get('tripId')
+            if not tripId or postData is None:
+                return jsonify({"Error": "Missing request data"}), 401
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                userId = self.tripUserService.fetchUserIDFromEmail(user_email)
+                if self.tripUserService.checkIfUserHasAuthority(user_email, tripId):
+                    postData['userId'] = userId
+                    self.logging.info("-----Editing note for trip-----")
+                    return jsonify({"Message": self.notesService.editNote(postData)}), 200
+                else:
+                    return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
+
+        except Exception as ex:
+            return jsonify({"Error": f"Error editing notes for trip{ex}"}), 500
+        finally:
+            self.logging.info("----Finished editing notes for trip-----")
+
+    def deleteNote(self):
+        try:
+            tripId = request.args.get('tripId')
+            noteId = request.args.get('noteId')
+            auth_header = request.headers.get('Authorization')
+            if not tripId or not noteId:
+                return jsonify({"Error": "Missing request data"}), 401
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                userId = self.tripUserService.fetchUserIDFromEmail(user_email)
+                if self.tripUserService.checkIfUserHasAuthority(user_email, tripId):
+                    self.logging.info("-----Deleting Note for trip-----")
+                    return jsonify({"Message": self.notesService.deleteNote(userId, tripId, noteId)}), 200
+                else:
+                    return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
+        except Exception as ex:
+            return jsonify({"Error": f"Error deleting notes for trip{ex}"}), 500
+        finally:
+            self.logging.info("----Finished deleting notes for trip-----")
