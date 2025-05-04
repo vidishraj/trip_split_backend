@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from models import Balance, Expense
 from flask import g
 
@@ -50,6 +52,19 @@ class ExpenseBalanceHandler:
             }
             for expense in result
         ]
+
+    def fetchIndividualBalance(self, tripId):
+        # Self expenses have no rows in the balance table
+        selfExpenses = Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
+        balances: [Balance] = Balance.query.filter_by(tripId=tripId).all()
+        res = defaultdict(int)
+        for expense in selfExpenses:
+            res[expense.expensePaidBy] += expense.expenseAmount
+
+        for balance in balances:
+            if balance.amount > 0:
+                res[balance.userId] += balance.amount
+        return res
 
     def fetchExpForTripJoined(self, tripId):
         result = (

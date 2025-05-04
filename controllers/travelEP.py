@@ -5,7 +5,7 @@ from firebase_admin import auth
 
 class TravelEP:
 
-    def __init__(self, tripUserService, expenseBalanceService,notesService):
+    def __init__(self, tripUserService, expenseBalanceService, notesService):
         self.logging = Logger().get_logger()
         self.tripUserService = tripUserService
         self.expenseBalanceService = expenseBalanceService
@@ -323,6 +323,27 @@ class TravelEP:
             return jsonify({"Error": f"Error fetching balances for trip{ex}"}), 500
         finally:
             self.logging.info("----Finished fetching balances for trip-----")
+
+    def fetchIndividualBalance(self):
+        try:
+            tripId = request.args.get('trip')
+            auth_header = request.headers.get('Authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split(' ')[1]
+                decoded_token = auth.verify_id_token(id_token)
+                user_email = decoded_token.get('email')
+                if self.tripUserService.checkIfUserHasAuthority(user_email, tripId):
+                    self.logging.info("-----Fetching individual balance for trip-----")
+                    return jsonify({"Message": self.expenseBalanceService.fetchIndividualBalance(tripId)}), 200
+                else:
+                    return jsonify({"Error": "User does not has Auth."}), 501
+            else:
+                return jsonify({"Error": "Auth info missing."}), 403
+
+        except Exception as ex:
+            return jsonify({"Error": f"Error fetching individual balances for trip{ex}"}), 500
+        finally:
+            self.logging.info("----Finished fetching individual balances for trip-----")
 
     """ Notes EP """
 

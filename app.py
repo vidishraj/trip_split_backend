@@ -130,6 +130,7 @@ class FlaskApp(Flask):
         self.app.add_url_rule('/deleteExpenses', methods=['GET'], view_func=self.travelEP.deleteExpenseForTrip)
         # Balance based EPS
         self.app.add_url_rule('/fetchBalances', methods=['GET'], view_func=self.travelEP.fetchBalancesForATrip)
+        self.app.add_url_rule('/fetchIndividualBalance', methods=['GET'], view_func=self.travelEP.fetchIndividualBalance)
         # Notes based EPS
         self.app.add_url_rule('/createNote', methods=['POST'], view_func=self.travelEP.createNote)
         self.app.add_url_rule('/editNote', methods=['PUT'], view_func=self.travelEP.editNote)
@@ -145,4 +146,4 @@ class FlaskApp(Flask):
 flaskappRunner = FlaskApp(__name__)
 flask_app = flaskappRunner.app
 
-flaskappRunner.run_app()
+#flaskappRunner.run_app()

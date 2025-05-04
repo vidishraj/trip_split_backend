@@ -16,6 +16,9 @@ class ExpenseBalanceService:
     def fetchExpensesForTrip(self, tripId):
         return self.Handler.fetchExpForTripJoined(tripId)
 
+    def fetchIndividualBalance(self, tripId):
+        return self.Handler.fetchIndividualBalance(tripId)
+
     def addExpenseForTrip(self, expense):
         """
         First obj is to insert the expense, then individually call the balance table.
