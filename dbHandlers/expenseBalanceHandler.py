@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+from sqlalchemy import func
+
 from models import Balance, Expense
 from flask import g
 
@@ -55,14 +57,17 @@ class ExpenseBalanceHandler:
 
     def fetchIndividualBalance(self, tripId):
         # Self expenses have no rows in the balance table
-        # selfExpenses = Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
+        selfExpenses = Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
+        totalExpense = self._dbSession.session.query(func.sum(Expense.expenseAmount)).filter_by(tripId=tripId).scalar()
         balances: [Balance] = Balance.query.filter_by(tripId=tripId).all()
-        res = defaultdict(int)
-        # for expense in selfExpenses:
-        #     res[expense.expensePaidBy] += expense.expenseAmount
+        res = defaultdict(lambda: defaultdict(int))
+        for expense in selfExpenses:
+            res['selfExpense'][expense.expensePaidBy] += expense.expenseAmount
 
         for balance in balances:
-            res[balance.userId] += abs(balance.amount)
+            res['expense'][balance.borrowedFrom] += abs(balance.amount)
+
+        res['total'] = totalExpense
         return res
 
     def fetchExpForTripJoined(self, tripId):
