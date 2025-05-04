@@ -55,11 +55,11 @@ class ExpenseBalanceHandler:
 
     def fetchIndividualBalance(self, tripId):
         # Self expenses have no rows in the balance table
-        selfExpenses = Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
+        # selfExpenses = Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
         balances: [Balance] = Balance.query.filter_by(tripId=tripId).all()
         res = defaultdict(int)
-        for expense in selfExpenses:
-            res[expense.expensePaidBy] += expense.expenseAmount
+        # for expense in selfExpenses:
+        #     res[expense.expensePaidBy] += expense.expenseAmount
 
         for balance in balances:
             res[balance.userId] += abs(balance.amount)
