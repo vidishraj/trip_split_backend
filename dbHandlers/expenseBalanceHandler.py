@@ -56,18 +56,34 @@ class ExpenseBalanceHandler:
         ]
 
     def fetchIndividualBalance(self, tripId):
-        # Self expenses have no rows in the balance table
-        selfExpenses = Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
-        totalExpense = self._dbSession.session.query(func.sum(Expense.expenseAmount)).filter_by(tripId=tripId).scalar()
-        balances: [Balance] = Balance.query.filter_by(tripId=tripId).all()
+        selfExpenses = (
+            Expense.query.filter_by(tripId=tripId).filter_by(expenseSelf=True).all()
+        )
+        joined_data = (
+            self._dbSession.session.query(Expense, Balance)
+            .join(Balance, Expense.expenseId == Balance.expenseId)
+            .filter(Expense.tripId == tripId)
+            .all()
+        )
+        totalExpense = (
+            self._dbSession.session.query(func.sum(Expense.expenseAmount))
+            .filter_by(tripId=tripId)
+            .scalar()
+        )
+
+
         res = defaultdict(lambda: defaultdict(int))
+
         for expense in selfExpenses:
-            res['selfExpense'][expense.expensePaidBy] += expense.expenseAmount
+            res["selfExpense"][expense.expensePaidBy] += expense.expenseAmount
 
-        for balance in balances:
-            res['expense'][balance.borrowedFrom] += abs(balance.amount)
+        for expense, balance in joined_data:
+            if balance.userId == expense.expensePaidBy:
+                res['expense'][balance.userId] += (expense.expenseAmount-abs(balance.amount))
+            else:
+                res['expense'][balance.userId] += abs(balance.amount)
 
-        res['total'] = totalExpense
+        res["total"] = totalExpense or 0
         return res
 
     def fetchExpForTripJoined(self, tripId):
