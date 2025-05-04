@@ -62,8 +62,7 @@ class ExpenseBalanceHandler:
             res[expense.expensePaidBy] += expense.expenseAmount
 
         for balance in balances:
-            if balance.amount > 0:
-                res[balance.userId] += balance.amount
+            res[balance.userId] += abs(balance.amount)
         return res
 
     def fetchExpForTripJoined(self, tripId):
