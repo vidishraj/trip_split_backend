@@ -133,8 +133,11 @@ class ExpenseBalanceService:
                 'amount': -1 * highestOweMoney
             })
             netLeft = -1 * highestOwedMoney + highestOweMoney
-            if netLeft != 0:
-                # Add it back to heap
-                heapq.heappush(usersOwedMoney, tuple([-1 * netLeft, userIdPayee]))
+            if netLeft > 0:
+                # Creditor still owed money, add back to usersOwedMoney heap
+                heapq.heappush(usersOwedMoney, tuple([-1 * netLeft, userIdPaidTo]))
+            elif netLeft < 0:
+                # Debtor still owes money, add back to userOweMoney heap
+                heapq.heappush(userOweMoney, tuple([-1 * netLeft, userIdPayee]))
 
         return response

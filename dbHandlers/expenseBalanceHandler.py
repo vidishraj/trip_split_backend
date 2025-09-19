@@ -77,12 +77,8 @@ class ExpenseBalanceHandler:
             res["selfExpense"][expense.expensePaidBy] += expense.expenseAmount
 
         for expense, balance in joined_data:
-            if balance.userId == expense.expensePaidBy:
-                # Person who paid: amount they paid minus what they owe
-                res['expense'][balance.userId] += expense.expenseAmount + balance.amount
-            else:
-                # Person who didn't pay: what they owe (negative amount)
-                res['expense'][balance.userId] += balance.amount
+            # For all users: just add their balance amount (positive for payer, negative for debtors)
+            res['expense'][balance.userId] += balance.amount
 
         res["total"] = totalExpense or 0
         return res
