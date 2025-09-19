@@ -71,7 +71,6 @@ class ExpenseBalanceHandler:
             .scalar()
         )
 
-
         res = defaultdict(lambda: defaultdict(int))
 
         for expense in selfExpenses:
@@ -79,9 +78,9 @@ class ExpenseBalanceHandler:
 
         for expense, balance in joined_data:
             if balance.userId == expense.expensePaidBy:
-                res['expense'][balance.userId] += (expense.expenseAmount-abs(balance.amount))
+                res['expense'][balance.userId] += balance.amount
             else:
-                res['expense'][balance.userId] += abs(balance.amount)
+                res['expense'][balance.userId] += balance.amount
 
         res["total"] = totalExpense or 0
         return res
