@@ -107,8 +107,7 @@ class ExpenseBalanceService:
         # Create net user owed dict
         userOwedDict = defaultdict(int)
         for balance in balances:
-            if balance['expenseId'] not in [40, 41, 14]:
-                userOwedDict[balance['userId']] += balance['amount']
+            userOwedDict[balance['userId']] += balance['amount']
 
         # We will use two heaps. One heap for user who owe money and one for user who are owed money
         userIds = list(userOwedDict.keys())
@@ -123,21 +122,32 @@ class ExpenseBalanceService:
         heapq.heapify(userOweMoney)
 
         # We reduce till there people who need to pay people money (Negative values)
-        while len(userOweMoney) > 0:
+        while len(userOweMoney) > 0 and len(usersOwedMoney) > 0:
             # Our goal is to map transactions of max owed to max owe.
             highestOweMoney, userIdPayee = heapq.heappop(userOweMoney)
             highestOwedMoney, userIdPaidTo = heapq.heappop(usersOwedMoney)
+            
+            # Amount to transfer is the minimum of what debtor owes and what creditor is owed
+            debtAmount = -1 * highestOweMoney  # Convert negative debt to positive amount
+            creditAmount = -1 * highestOwedMoney  # Convert negative heap value to positive amount
+            transferAmount = min(debtAmount, creditAmount)
+            
             response.append({
                 'from': userIdPayee,
                 'to': userIdPaidTo,
-                'amount': -1 * highestOweMoney
+                'amount': transferAmount
             })
-            netLeft = -1 * highestOwedMoney + highestOweMoney
-            if netLeft > 0:
+            
+            # Calculate remaining amounts
+            remainingDebt = debtAmount - transferAmount
+            remainingCredit = creditAmount - transferAmount
+            
+            # Add back remaining amounts if > threshold
+            if remainingCredit > 0.01:
                 # Creditor still owed money, add back to usersOwedMoney heap
-                heapq.heappush(usersOwedMoney, tuple([-1 * netLeft, userIdPaidTo]))
-            elif netLeft < 0:
-                # Debtor still owes money, add back to userOweMoney heap
-                heapq.heappush(userOweMoney, tuple([-1 * netLeft, userIdPayee]))
+                heapq.heappush(usersOwedMoney, tuple([-1 * remainingCredit, userIdPaidTo]))
+            if remainingDebt > 0.01:
+                # Debtor still owes money, add back to userOweMoney heap  
+                heapq.heappush(userOweMoney, tuple([-1 * remainingDebt, userIdPayee]))
 
         return response

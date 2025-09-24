@@ -45,11 +45,11 @@ class ExpenseBalanceHandler:
         return [
             {
                 'expenseId': expense.expenseId,
-                'date': expense.date,
+                'date': expense.expenseDate,
                 'expenseDesc': expense.expenseDesc,
-                'amount': expense.amount,
-                'paidBy': expense.paidBy,
-                'splitBetween': expense.splitBetween,
+                'amount': expense.expenseAmount,
+                'paidBy': expense.expensePaidBy,
+                'splitBetween': expense.expenseSplitBw,
                 'tripId': expense.tripId,
             }
             for expense in result
