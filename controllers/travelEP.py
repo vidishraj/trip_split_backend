@@ -348,7 +348,7 @@ class TravelEP:
 
     def fetchIndividualSpending(self):
         try:
-            tripId = request.args.get('trip')
+            tripId = request.args.get('tripId')
             auth_header = request.headers.get('Authorization')
             if auth_header and auth_header.startswith('Bearer '):
                 id_token = auth_header.split(' ')[1]
