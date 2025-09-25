@@ -6,9 +6,11 @@ from controllers.travelEP import TravelEP
 from dbHandlers.expenseBalanceHandler import ExpenseBalanceHandler
 from dbHandlers.noteHandler import NotesHandler
 from dbHandlers.tripUserHandler import TripUserHandler
+from dbHandlers.individualSpendingHandler import IndividualSpendingHandler
 from services.expenseBalanceService import ExpenseBalanceService
 from services.notesService import NotesService
 from services.tripUserService import TripUserService
+from services.individualSpendingService import IndividualSpendingService
 from util.logger import Logger
 from flask_cors import CORS
 import firebase_admin
@@ -56,10 +58,12 @@ class FlaskApp(Flask):
         tripUserHandler = TripUserHandler()
         expenseBalanceHandler = ExpenseBalanceHandler()
         notesHandler = NotesHandler()
+        individualSpendingHandler = IndividualSpendingHandler()
         tripUserService = TripUserService(tripUserHandler)
         expenseBalanceService = ExpenseBalanceService(expenseBalanceHandler)
         notesService = NotesService(notesHandler)
-        self.travelEP = TravelEP(tripUserService, expenseBalanceService, notesService)
+        individualSpendingService = IndividualSpendingService(individualSpendingHandler)
+        self.travelEP = TravelEP(tripUserService, expenseBalanceService, notesService, individualSpendingService)
 
     def _setup_hooks(self):
         """Set up request and teardown hooks."""
@@ -131,6 +135,7 @@ class FlaskApp(Flask):
         # Balance based EPS
         self.app.add_url_rule('/fetchBalances', methods=['GET'], view_func=self.travelEP.fetchBalancesForATrip)
         self.app.add_url_rule('/fetchIndividualBalance', methods=['GET'], view_func=self.travelEP.fetchIndividualBalance)
+        self.app.add_url_rule('/fetchIndividualSpending', methods=['GET'], view_func=self.travelEP.fetchIndividualSpending)
         # Notes based EPS
         self.app.add_url_rule('/createNote', methods=['POST'], view_func=self.travelEP.createNote)
         self.app.add_url_rule('/editNote', methods=['PUT'], view_func=self.travelEP.editNote)
