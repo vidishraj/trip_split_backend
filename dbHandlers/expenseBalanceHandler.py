@@ -119,8 +119,19 @@ class ExpenseBalanceHandler:
             for row in result
         ]
         selfExpensesInDb = Expense.query.filter_by(expenseSelf=True).filter_by(tripId=tripId).all()
-        selfExpenses = [
-            {
+        selfExpenses = []
+        for selfExpense in selfExpensesInDb:
+            # Parse the stored JSON split data for self expenses
+            import json
+            try:
+                split_data = json.loads(selfExpense.expenseSplitBw)
+                # Find the amount for the payer (should be the same as paidBy for self expenses)
+                payer_amount = next((split['amount'] for split in split_data if split['userId'] == selfExpense.expensePaidBy), 0)
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # Fallback to 0 if JSON parsing fails
+                payer_amount = 0
+            
+            selfExpenses.append({
                 'expenseId': selfExpense.expenseId,
                 'date': selfExpense.expenseDate,
                 'expenseDesc': selfExpense.expenseDesc,
@@ -129,11 +140,9 @@ class ExpenseBalanceHandler:
                 'expenseSelf': selfExpense.expenseSelf,
                 'tripId': selfExpense.tripId,
                 'userId': selfExpense.expensePaidBy,
-                'splitAmount': 0,
+                'splitAmount': payer_amount,
                 'borrowedFrom': selfExpense.expensePaidBy,
-            }
-            for selfExpense in selfExpensesInDb
-        ]
+            })
         expenses += selfExpenses
         # Combine results by expenseId and tripId
         combined_result = {}
