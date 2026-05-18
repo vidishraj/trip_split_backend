@@ -37,11 +37,11 @@ jobs:
           cd "$APP_DIR"
 
           echo "==> Pulling latest"
-          sudo git fetch --all --prune
-          sudo git reset --hard origin/master
+          git fetch --all --prune
+          git reset --hard origin/master
 
           echo "==> Installing deps"
-          sudo "$APP_DIR/venv/bin/pip" install --quiet -r requirements.txt
+          "$APP_DIR/venv/bin/pip" install --quiet -r requirements.txt
 
           echo "==> Restarting service"
           sudo systemctl restart trip
