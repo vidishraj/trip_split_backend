@@ -11,6 +11,7 @@ from services.expenseBalanceService import ExpenseBalanceService
 from services.notesService import NotesService
 from services.tripUserService import TripUserService
 from services.individualSpendingService import IndividualSpendingService
+from services.agentService import TripAgentService
 from util.logger import Logger
 from flask_cors import CORS
 import firebase_admin
@@ -67,7 +68,13 @@ class FlaskApp(Flask):
         expenseBalanceService = ExpenseBalanceService(expenseBalanceHandler)
         notesService = NotesService(notesHandler)
         individualSpendingService = IndividualSpendingService(individualSpendingHandler)
-        self.travelEP = TravelEP(tripUserService, expenseBalanceService, notesService, individualSpendingService)
+        agentService = TripAgentService(
+            tripUserService, expenseBalanceService, notesService, individualSpendingService
+        )
+        self.travelEP = TravelEP(
+            tripUserService, expenseBalanceService, notesService,
+            individualSpendingService, agentService,
+        )
 
     def _setup_hooks(self):
         """Set up request and teardown hooks."""
@@ -145,6 +152,8 @@ class FlaskApp(Flask):
         self.app.add_url_rule('/editNote', methods=['PUT'], view_func=self.travelEP.editNote)
         self.app.add_url_rule('/deleteNote', methods=['DELETE'], view_func=self.travelEP.deleteNote)
         self.app.add_url_rule('/getNotes', methods=['GET'], view_func=self.travelEP.fetchNotesForATrip)
+        # Assistant EP
+        self.app.add_url_rule('/chat', methods=['POST'], view_func=self.travelEP.chat)
 
     def run_app(self):
         self.logger.info("Starting Trip Split...")

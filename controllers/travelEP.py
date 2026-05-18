@@ -1,6 +1,6 @@
 from util.logger import Logger
 from util.auth import require_auth, require_trip_auth
-from flask import request, jsonify, g
+from flask import request, jsonify, g, current_app
 
 # tripId extractors used with @require_trip_auth
 _trip_from_arg = lambda r: r.args.get('trip')
@@ -11,12 +11,14 @@ _tripId_from_json_body = lambda r: ((r.get_json(silent=True) or {}).get('body') 
 
 class TravelEP:
 
-    def __init__(self, tripUserService, expenseBalanceService, notesService, individualSpendingService):
+    def __init__(self, tripUserService, expenseBalanceService, notesService,
+                 individualSpendingService, agentService=None):
         self.logging = Logger().get_logger()
         self.tripUserService = tripUserService
         self.expenseBalanceService = expenseBalanceService
         self.notesService = notesService
         self.individualSpendingService = individualSpendingService
+        self.agentService = agentService
 
     """ Trip EPs """
 
@@ -238,6 +240,42 @@ class TravelEP:
         except Exception as ex:
             self.logging.error(f"Error editing note: {ex}")
             return jsonify({"Error": f"Error editing notes for trip: {ex}"}), 500
+
+    """ Assistant EP """
+
+    @require_auth
+    @require_trip_auth(_tripId_from_json)
+    def chat(self):
+        if self.agentService is None:
+            return jsonify({"Error": "Assistant not configured."}), 503
+        try:
+            payload = request.get_json()
+            message = (payload.get('message') or '').strip()
+            if not message:
+                return jsonify({"Error": "Missing message."}), 400
+            history = payload.get('history') or []
+            trip = self.tripUserService.Handler._dbConnection.session.query  # noqa: F841 (kept for clarity)
+            # Trip metadata for the system prompt — pulled once, no extra round-trip.
+            from models import Trip
+            trip_row = self.tripUserService.Handler._dbConnection.session.query(
+                Trip
+            ).filter_by(tripIdShared=g.trip_id).first()
+            trip_title = trip_row.tripTitle if trip_row else g.trip_id
+            currencies = trip_row.currencies.split(',') if trip_row and trip_row.currencies else []
+            result = self.agentService.handle_message(
+                app=current_app._get_current_object(),
+                trip_id=g.trip_id,
+                trip_title=trip_title,
+                currencies=currencies,
+                current_user_email=g.user_email,
+                message=message,
+                history=history,
+            )
+            status = 500 if result.get('error') else 200
+            return jsonify({"Message": result}), status
+        except Exception as ex:
+            self.logging.error(f"Error in chat: {ex}")
+            return jsonify({"Error": f"Error in chat: {ex}"}), 500
 
     @require_auth
     @require_trip_auth(_tripId_from_arg)
