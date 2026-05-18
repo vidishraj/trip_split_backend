@@ -46,9 +46,9 @@ jobs:
           echo "==> Restarting service"
           sudo systemctl restart trip
 
-          echo "==> Health check (via unix socket)"
+          echo "==> Health check (public HTTPS endpoint)"
           for i in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null --unix-socket "$APP_DIR/app.sock" -w "%{http_code}" http://localhost/fetchTrips || true)
+            code=$(curl -sk -o /dev/null -w "%{http_code}" https://tripsplit.vidish.online/api/fetchTrips || true)
             if [[ "$code" == "403" || "$code" == "401" ]]; then
               echo "Backend healthy (status $code without auth = expected)"
               exit 0
