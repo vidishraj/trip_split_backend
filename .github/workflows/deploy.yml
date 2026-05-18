@@ -1,0 +1,62 @@
+name: Deploy backend
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy and restart
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          ssh "$SERVER_USER@$SERVER_HOST" bash -s <<'EOF'
+          set -euo pipefail
+
+          APP_DIR=/home/opc/trip_split_backend
+          cd "$APP_DIR"
+
+          echo "==> Pulling latest"
+          sudo git fetch --all --prune
+          sudo git reset --hard origin/master
+
+          echo "==> Installing deps"
+          sudo "$APP_DIR/venv/bin/pip" install --quiet -r requirements.txt
+
+          echo "==> Restarting service"
+          sudo systemctl restart trip
+
+          echo "==> Health check (via unix socket)"
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null --unix-socket "$APP_DIR/app.sock" -w "%{http_code}" http://localhost/fetchTrips || true)
+            if [[ "$code" == "403" || "$code" == "401" ]]; then
+              echo "Backend healthy (status $code without auth = expected)"
+              exit 0
+            fi
+            echo "Attempt $i: got $code, retrying..."
+            sleep 2
+          done
+          echo "Backend failed health check"
+          sudo systemctl status trip --no-pager | tail -30
+          exit 1
+          EOF

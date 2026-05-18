@@ -1,1 +1,15 @@
 .idea
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env
+docs/
+migrations/
+serviceAccountKey.json
+*.log
+.env

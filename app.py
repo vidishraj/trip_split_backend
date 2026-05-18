@@ -34,7 +34,11 @@ class FlaskApp(Flask):
         super().__init__(import_name)
         self.app = self.app_context().app
         self.logger = Logger().get_logger()
-        CORS(self.app)
+        allowed = [o.strip() for o in os.getenv(
+            'CORS_ORIGINS',
+            'https://tripsplit.vidish.online,http://localhost:3000'
+        ).split(',') if o.strip()]
+        CORS(self, origins=allowed, supports_credentials=True)
         self._setup_config()
         self._setup_database()
         self._setup_instances()
@@ -151,4 +155,5 @@ class FlaskApp(Flask):
 flaskappRunner = FlaskApp(__name__)
 flask_app = flaskappRunner.app
 
-#flaskappRunner.run_app()
+if __name__ == "__main__":
+    flaskappRunner.run_app()
