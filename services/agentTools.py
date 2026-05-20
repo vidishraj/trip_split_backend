@@ -6,15 +6,20 @@ that delegates to existing services. The set is intentionally small —
 covering both reads and the common writes (add expense, delete expense,
 add note). All actions are scoped to a single trip; the trip_id is
 threaded through closure, not exposed as a tool parameter.
+
+Money: amounts can be denominated in any supported currency code
+(`inr`, `usd`, `eur`, `gbp`, `aud`, `thb`, etc.). The tools convert to
+INR server-side before persisting — the model never has to do FX math.
 """
-from datetime import datetime
+from datetime import datetime, timezone
+
+from services.fxService import to_inr, get_rates
 
 
 def build_tools(trip_id, current_user_id, services):
     """
-    Returns a list of (name, description, input_schema, handler) tuples.
-    `services` is a dict with keys: tripUserService, expenseBalanceService,
-    notesService, individualSpendingService.
+    Returns (tools, mutation_names) where tools is a list of
+    (name, description, input_schema, handler) tuples.
     """
     tripUserService = services['tripUserService']
     expenseBalanceService = services['expenseBalanceService']
@@ -23,6 +28,7 @@ def build_tools(trip_id, current_user_id, services):
 
     MUTATIONS = {'add_expense', 'delete_expense', 'add_note'}
 
+    # ─── reads ───────────────────────────────────────────────────────
     def _list_users(_args):
         return tripUserService.fetchUserForTrip(trip_id)
 
@@ -42,37 +48,105 @@ def build_tools(trip_id, current_user_id, services):
         page = int(args.get('page', 1))
         return notesService.fetchNotesForATrip(trip_id, page)
 
-    def _add_expense(args):
-        split = args['splitBetween']
-        total = float(args['amount'])
-        sum_split = round(sum(float(s['amount']) for s in split), 2)
-        if abs(sum_split - round(total, 2)) > 0.01 and not args.get('selfExpense'):
-            return {
-                'ok': False,
-                'error': f'splitBetween amounts ({sum_split}) must sum to total ({total}).',
-            }
-        payload = {
-            'tripId': trip_id,
-            'date': args.get('date') or datetime.utcnow().strftime('%Y-%m-%d'),
-            'description': args['description'],
-            'amount': total,
-            'paidBy': int(args['paidBy']),
-            'splitbw': [{'userId': int(s['userId']), 'amount': float(s['amount'])} for s in split],
-            'selfExpense': bool(args.get('selfExpense', False)),
+    def _fx_rates(_args):
+        rates = get_rates()
+        # Return rates as "1 unit of X = N INR" — the human-facing direction.
+        return {
+            currency.upper(): round(1.0 / rate, 4) if rate else None
+            for currency, rate in rates.items()
         }
-        ok = expenseBalanceService.addExpenseForTrip(payload)
-        return {'ok': bool(ok)}
+
+    # ─── writes ──────────────────────────────────────────────────────
+    def _add_expense(args):
+        try:
+            currency = (args.get('currency') or 'inr').lower()
+            raw_amount = float(args['amount'])
+            if raw_amount <= 0:
+                return {'ok': False, 'error': 'amount must be > 0'}
+
+            # Convert per-user split amounts in the source currency to INR
+            # using the same rate as the total. This avoids rounding drift.
+            split = args['splitBetween'] or []
+            if not split:
+                return {'ok': False, 'error': 'splitBetween must not be empty'}
+
+            paidBy = int(args['paidBy'])
+            split_norm = []
+            for s in split:
+                uid = int(s['userId'])
+                amt = float(s['amount'])
+                if amt < 0:
+                    return {'ok': False, 'error': 'split amounts must be non-negative'}
+                split_norm.append({'userId': uid, 'amount': amt})
+
+            split_sum = round(sum(s['amount'] for s in split_norm), 2)
+            self_expense = bool(args.get('selfExpense', False))
+            if not self_expense and abs(split_sum - round(raw_amount, 2)) > 0.01:
+                return {
+                    'ok': False,
+                    'error': (
+                        f'splitBetween sum ({split_sum}) must equal amount ({raw_amount}) '
+                        f'(in source currency {currency.upper()})'
+                    ),
+                }
+
+            # Convert all amounts to INR before persisting.
+            try:
+                inr_total = to_inr(raw_amount, currency)
+                inr_split = [
+                    {'userId': s['userId'], 'amount': to_inr(s['amount'], currency)}
+                    for s in split_norm
+                ]
+            except ValueError as ve:
+                return {'ok': False, 'error': str(ve)}
+
+            payload = {
+                'tripId': trip_id,
+                'date': args.get('date') or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                'description': args['description'],
+                'amount': inr_total,
+                'paidBy': paidBy,
+                'splitbw': inr_split,
+                'selfExpense': self_expense,
+            }
+            ok = expenseBalanceService.addExpenseForTrip(payload)
+            if not ok:
+                return {
+                    'ok': False,
+                    'error': 'persist failed — split may not balance or DB rejected the write',
+                }
+            return {
+                'ok': True,
+                'currency': currency.upper(),
+                'amount_in_inr': round(inr_total, 2),
+                'amount_in_source': round(raw_amount, 2),
+            }
+        except KeyError as ke:
+            return {'ok': False, 'error': f'missing required field {ke}'}
+        except (ValueError, TypeError) as ex:
+            return {'ok': False, 'error': str(ex)}
 
     def _delete_expense(args):
-        return {'ok': bool(expenseBalanceService.deleteExpenseFromTrip(int(args['expenseId'])))}
+        try:
+            ok = expenseBalanceService.deleteExpenseFromTrip(
+                int(args['expenseId']), trip_id,
+            )
+            if not ok:
+                return {'ok': False, 'error': 'expense not found in this trip'}
+            return {'ok': True}
+        except (ValueError, TypeError, KeyError) as ex:
+            return {'ok': False, 'error': str(ex)}
 
     def _add_note(args):
-        notesService.createNote({
-            'userId': current_user_id,
-            'tripId': trip_id,
-            'note': args['note'],
-        })
-        return {'ok': True}
+        try:
+            notesService.createNote({
+                'userId': current_user_id,
+                'tripId': trip_id,
+                'note': args['note'],
+            })
+            return {'ok': True}
+        except KeyError as ke:
+            return {'ok': False, 'error': f'missing required field {ke}'}
 
     tools = [
         (
@@ -116,25 +190,46 @@ def build_tools(trip_id, current_user_id, services):
             _list_notes,
         ),
         (
+            'fx_rates',
+            'Current foreign-exchange rates expressed as 1 unit of X = N INR. Use to interpret amounts the user mentions in non-INR currencies.',
+            {'type': 'object', 'properties': {}, 'required': []},
+            _fx_rates,
+        ),
+        (
             'add_expense',
             (
-                'Add a new expense. All amounts are in INR. paidBy is a userId. '
-                'splitBetween is an array of {userId, amount}; amounts must sum to the total amount unless selfExpense=true. '
-                'selfExpense=true is for a personal expense the user wants to track without splitting (no balances are created).'
+                'Add a new expense.\n'
+                'Amount may be in any supported currency (set `currency` to a 3-letter code like '
+                '"eur", "usd", "gbp", "thb" — defaults to "inr"). The server converts to INR before '
+                'persisting; do NOT convert in your head.\n'
+                'splitBetween is an array of {userId, amount} pairs in the SAME `currency` as `amount`. '
+                'Sum of split amounts must equal `amount` unless selfExpense=true.\n'
+                'Include the payer in splitBetween when they share the expense; omit them if the payer '
+                'paid entirely for someone else (e.g. "Alice paid X for Bob": paidBy=Alice, '
+                'splitBetween=[{userId: Bob, amount: X}]).\n'
+                'selfExpense=true: a personal expense logged for the bearer, no balances created. '
+                'splitBetween must still be provided with a single entry for the payer.\n'
+                'date is ISO YYYY-MM-DD; defaults to today.'
             ),
             {
                 'type': 'object',
                 'properties': {
-                    'description': {'type': 'string'},
-                    'amount': {'type': 'number', 'description': 'Total in INR'},
-                    'paidBy': {'type': 'integer', 'description': 'userId of the payer'},
+                    'description': {'type': 'string', 'minLength': 1, 'maxLength': 350},
+                    'amount': {'type': 'number', 'exclusiveMinimum': 0},
+                    'currency': {
+                        'type': 'string',
+                        'description': '3-letter currency code (lowercase). Defaults to "inr".',
+                        'default': 'inr',
+                    },
+                    'paidBy': {'type': 'integer'},
                     'splitBetween': {
                         'type': 'array',
+                        'minItems': 1,
                         'items': {
                             'type': 'object',
                             'properties': {
                                 'userId': {'type': 'integer'},
-                                'amount': {'type': 'number'},
+                                'amount': {'type': 'number', 'minimum': 0},
                             },
                             'required': ['userId', 'amount'],
                         },
@@ -148,7 +243,7 @@ def build_tools(trip_id, current_user_id, services):
         ),
         (
             'delete_expense',
-            'Delete an expense from the trip by expenseId.',
+            'Delete an expense from the trip by expenseId. Only expenses belonging to this trip can be deleted.',
             {
                 'type': 'object',
                 'properties': {'expenseId': {'type': 'integer'}},
@@ -161,7 +256,7 @@ def build_tools(trip_id, current_user_id, services):
             'Add a free-form note to the trip. Notes are attributed to the current user.',
             {
                 'type': 'object',
-                'properties': {'note': {'type': 'string'}},
+                'properties': {'note': {'type': 'string', 'minLength': 1, 'maxLength': 1000}},
                 'required': ['note'],
             },
             _add_note,

@@ -49,10 +49,12 @@ class TripUserService:
     def fetchUserForTrip(self, tripId):
         return self.Handler.fetchUsersForTrip(tripId)
 
-    def deleteUser(self, user):
-        if not self.Handler.checkIfUserHasExpenses(user):
-            return self.Handler.deleteUser(user)
-        return False
+    def removeUserFromTrip(self, userId, tripId):
+        """Remove a member from this trip. Blocked if they have any expense
+        recorded against the trip."""
+        if self.Handler.checkIfUserHasExpenses(userId, tripId):
+            return False
+        return self.Handler.removeUserFromTrip(userId, tripId)
 
     def tripIdExists(self, generatedId: str):
         return self.Handler.checkIfTripIdExists(generatedId)

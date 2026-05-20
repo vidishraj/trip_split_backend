@@ -126,10 +126,15 @@ class TravelEP:
     def deleteUser(self):
         try:
             userId = request.args.get('userId')
-            return jsonify({"Message": self.tripUserService.deleteUser(userId)}), 200
+            if not userId:
+                return jsonify({"Error": "Missing userId."}), 400
+            ok = self.tripUserService.removeUserFromTrip(int(userId), g.trip_id)
+            if not ok:
+                return jsonify({"Error": "User has expenses on the trip — cannot remove."}), 409
+            return jsonify({"Message": True}), 200
         except Exception as ex:
-            self.logging.error(f"Error deleting user: {ex}")
-            return jsonify({"Error": f"Error deleting user: {ex}"}), 500
+            self.logging.error(f"Error removing user from trip: {ex}")
+            return jsonify({"Error": f"Error removing user from trip: {ex}"}), 500
 
     """ Expense EPs """
 
@@ -147,6 +152,8 @@ class TravelEP:
     def addExpenseForTrip(self):
         try:
             payload = request.get_json()
+            # Force trip scope regardless of what the body claims.
+            payload['tripId'] = g.trip_id
             result = self.expenseBalanceService.addExpenseForTrip(payload)
             if not result:
                 return jsonify({"Error": "Failed to add expense."}), 500
@@ -160,8 +167,16 @@ class TravelEP:
     def editExpenseForTrip(self):
         try:
             payload = request.get_json()
-            return jsonify({"Message": self.expenseBalanceService.editExpenseForTrip(
-                payload['expenseId'], payload['body'])}), 200
+            body = payload['body']
+            # Force the tripId scope to the authed trip — body['tripId'] is
+            # only trusted insofar as the decorator validated it; we still
+            # pass g.trip_id to the handler so the SQL lookup is scoped.
+            ok = self.expenseBalanceService.editExpenseForTrip(
+                int(payload['expenseId']), g.trip_id, body,
+            )
+            if not ok:
+                return jsonify({"Error": "Expense not found in this trip."}), 404
+            return jsonify({"Message": ok}), 200
         except Exception as ex:
             self.logging.error(f"Error updating expense: {ex}")
             return jsonify({"Error": f"Error updating expense for trip: {ex}"}), 500
@@ -171,7 +186,14 @@ class TravelEP:
     def deleteExpenseForTrip(self):
         try:
             expenseId = request.args.get('expenseId')
-            return jsonify({"Message": self.expenseBalanceService.deleteExpenseFromTrip(expenseId)}), 200
+            if not expenseId:
+                return jsonify({"Error": "Missing expenseId."}), 400
+            ok = self.expenseBalanceService.deleteExpenseFromTrip(
+                int(expenseId), g.trip_id,
+            )
+            if not ok:
+                return jsonify({"Error": "Expense not found in this trip."}), 404
+            return jsonify({"Message": True}), 200
         except Exception as ex:
             self.logging.error(f"Error deleting expense: {ex}")
             return jsonify({"Error": f"Error deleting expense for trip: {ex}"}), 500
@@ -254,12 +276,9 @@ class TravelEP:
             if not message:
                 return jsonify({"Error": "Missing message."}), 400
             history = payload.get('history') or []
-            trip = self.tripUserService.Handler._dbConnection.session.query  # noqa: F841 (kept for clarity)
             # Trip metadata for the system prompt — pulled once, no extra round-trip.
             from models import Trip
-            trip_row = self.tripUserService.Handler._dbConnection.session.query(
-                Trip
-            ).filter_by(tripIdShared=g.trip_id).first()
+            trip_row = g.db.session.query(Trip).filter_by(tripIdShared=g.trip_id).first()
             trip_title = trip_row.tripTitle if trip_row else g.trip_id
             currencies = trip_row.currencies.split(',') if trip_row and trip_row.currencies else []
             result = self.agentService.handle_message(
@@ -271,6 +290,11 @@ class TravelEP:
                 message=message,
                 history=history,
             )
+            if result.get('retry_after') is not None:
+                resp = jsonify({"Message": result, "Error": result.get('error')})
+                resp.status_code = 429
+                resp.headers['Retry-After'] = str(result['retry_after'])
+                return resp
             status = 500 if result.get('error') else 200
             return jsonify({"Message": result}), status
         except Exception as ex:

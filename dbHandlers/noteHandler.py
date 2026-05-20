@@ -1,5 +1,5 @@
 from flask import g
-from mysql.connector import Error
+from sqlalchemy.exc import SQLAlchemyError
 
 from models import Note
 from util.logger import Logger
@@ -32,7 +32,7 @@ class NotesHandler:
             self._dbConnection.session.add(newNote)
             # Not sure if this is okay, check later
             self._dbConnection.session.commit()
-        except Error as e:
+        except SQLAlchemyError as e:
             self._dbConnection.session.rollback()
             self.logging.error(f"Error creating new note: {e}")
 
@@ -47,7 +47,7 @@ class NotesHandler:
             existingNote.note = note
             self._dbConnection.session.commit()
             return True
-        except Error as e:
+        except SQLAlchemyError as e:
             self._dbConnection.session.rollback()
             self.logging.error(f"Error updating note for noteId {noteId}; error: {e}")
             return False
@@ -61,7 +61,7 @@ class NotesHandler:
             # Commit the transaction
             self._dbConnection.session.commit()
             return True
-        except Error as e:
+        except SQLAlchemyError as e:
             self._dbConnection.session.rollback()
             self.logging.error(f"Error deleting note: {e}")
             return False
@@ -98,7 +98,7 @@ class NotesHandler:
                 'totalPages': total_pages
             }
 
-        except Error as e:
+        except SQLAlchemyError as e:
             self.logging.error(f"Error fetching notes for trip: {e}")
             return None
 

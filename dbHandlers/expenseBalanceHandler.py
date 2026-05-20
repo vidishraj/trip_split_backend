@@ -15,7 +15,13 @@ class ExpenseBalanceHandler:
         super().__init__()
         # self._dbSession = g.get('db')
 
-    def addBalance(self, balance):
+    def commit(self):
+        self._dbSession.session.commit()
+
+    def rollback(self):
+        self._dbSession.session.rollback()
+
+    def addBalance(self, balance, commit=True):
         balance = Balance(
             tripId=balance['tripId'],
             userId=balance['userId'],
@@ -24,9 +30,10 @@ class ExpenseBalanceHandler:
             borrowedFrom=balance['borrowedFrom']
         )
         self._dbSession.session.add(balance)
-        self._dbSession.session.commit()
+        if commit:
+            self._dbSession.session.commit()
 
-    def addExpense(self, expense):
+    def addExpense(self, expense, commit=True):
         expense = Expense(
             expenseDate=expense['date'],
             expenseDesc=expense['description'],
@@ -34,10 +41,13 @@ class ExpenseBalanceHandler:
             expensePaidBy=expense['paidBy'],
             expenseSplitBw=expense['splitbw'],
             tripId=expense['tripId'],
-            expenseSelf=expense['selfExpense']
+            expenseSelf=expense.get('selfExpense', False),
         )
         self._dbSession.session.add(expense)
-        self._dbSession.session.commit()
+        # Flush to get the autoincremented expenseId without committing.
+        self._dbSession.session.flush()
+        if commit:
+            self._dbSession.session.commit()
         return expense.expenseId
 
     def fetchExpForTrip(self, tripId):
@@ -164,12 +174,17 @@ class ExpenseBalanceHandler:
 
         return list(combined_result.values())
 
-    def deleteExpenseFromTrip(self, expenseId):
-        Expense.query.filter_by(expenseId=expenseId).delete()
+    def deleteExpenseFromTrip(self, expenseId, tripId):
+        """Delete an expense — must belong to the given trip."""
+        deleted = (
+            Expense.query
+            .filter_by(expenseId=expenseId, tripId=tripId)
+            .delete()
+        )
         self._dbSession.session.commit()
-        return True
+        return deleted > 0
 
-    def updateExpense(self, expenseId, tripData):
+    def updateExpense(self, expenseId, tripId, tripData):
         """
         Updated expense editing logic to handle new format and correct balance calculations
         """
@@ -177,9 +192,13 @@ class ExpenseBalanceHandler:
         
         split_list = tripData['splitbw']
         
-        # Fetch the expense to update
-        expense = self._dbSession.session.query(Expense).filter_by(expenseId=expenseId).first()
-        
+        # Fetch the expense to update — must belong to the given trip.
+        expense = (
+            self._dbSession.session.query(Expense)
+            .filter_by(expenseId=expenseId, tripId=tripId)
+            .first()
+        )
+
         if not expense:
             return False
         

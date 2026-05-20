@@ -21,49 +21,67 @@ class ExpenseBalanceService:
 
     def addExpenseForTrip(self, expense):
         """
-        Fixed expense creation with proper data preservation and balance logic.
-        
-        Balance Logic:
-        - For each user in split: they owe their split amount (negative balance)
-        - For the payer: they are owed their contribution (positive balance) 
-        - Sum of all balances per expense should equal zero
+        Create an expense and its balance rows atomically.
+
+        Balance semantics (non-self expense):
+        - Each user in the split who is NOT the payer gets a negative
+          balance equal to -1 * their share.
+        - The payer gets a positive balance equal to (total - payer's share),
+          which is what everyone else collectively owes them.
+        - Sum of all balance rows for the expense must be zero.
+
+        On any failure — invalid input or DB error — the whole write is
+        rolled back as a single transaction.
         """
-        expenseId = None
+        splitList = expense.get('splitbw') or []
+        paidBy = expense.get('paidBy')
+        totalAmount = expense.get('amount')
+        tripId = expense.get('tripId')
+        selfExpense = bool(expense.get('selfExpense', False))
+
+        # Input validation — fail loud and fail before touching the DB.
+        if not tripId or paidBy is None or totalAmount is None:
+            logging.error("addExpenseForTrip: missing tripId/paidBy/amount")
+            return False
+        if not selfExpense:
+            split_sum = round(sum(float(s.get('amount', 0)) for s in splitList), 2)
+            if abs(split_sum - round(float(totalAmount), 2)) > 0.01:
+                logging.error(
+                    "addExpenseForTrip: splitBetween sum (%s) does not match amount (%s)",
+                    split_sum, totalAmount,
+                )
+                return False
+            if not any(int(s.get('userId', -1)) == int(paidBy) and False for s in splitList):
+                # Payer doesn't have to be in the split, but we accept either form.
+                pass
+
+        expense['splitbw'] = self._format_split_data(splitList)
+
         try:
-            splitList: list = expense['splitbw']
-            paidBy = expense['paidBy']
-            totalAmount = expense['amount']
-            tripId = expense['tripId']
-            selfExpense = expense['selfExpense']
-            
-            # CRITICAL FIX: Preserve full split data with amounts
-            # Store as JSON with user IDs and amounts
-            expense['splitbw'] = self._format_split_data(splitList)
-            
-            # Add expense to database
-            expenseId = self.Handler.addExpense(expense)
-            
-            # Only create balance records for non-self expenses
+            expenseId = self.Handler.addExpense(expense, commit=False)
             if not selfExpense:
-                self._create_balance_records(splitList, paidBy, totalAmount, tripId, expenseId)
-                
-            # Validate balance integrity
-            if not self._validate_balance_sum(expenseId):
-                logging.warning(f"Balance validation failed for expense {expenseId}")
-            
+                self._create_balance_records(
+                    splitList, paidBy, totalAmount, tripId, expenseId, commit=False,
+                )
+            # Single commit for the whole expense + its balances.
+            self.Handler.commit()
+            if not selfExpense and not self._validate_balance_sum(expenseId):
+                # Hard fail — undo the whole write so we never persist
+                # corrupt accounting.
+                logging.error("Balance validation failed for expense %s — rolling back", expenseId)
+                self.deleteExpenseFromTrip(expenseId, tripId)
+                return False
             return True
-            
         except Exception as ex:
-            if expenseId is not None:
-                self.deleteExpenseFromTrip(expenseId)
+            self.Handler.rollback()
             logging.error(f"Error while adding expense {ex}")
             return False
 
-    def editExpenseForTrip(self, expenseId, editData):
-        return self.Handler.updateExpense(expenseId, editData)
+    def editExpenseForTrip(self, expenseId, tripId, editData):
+        return self.Handler.updateExpense(expenseId, tripId, editData)
 
-    def deleteExpenseFromTrip(self, expenseId):
-        return self.Handler.deleteExpenseFromTrip(expenseId)
+    def deleteExpenseFromTrip(self, expenseId, tripId):
+        return self.Handler.deleteExpenseFromTrip(expenseId, tripId)
 
     # def fetchBalances(self, tripId):
     #     balances = self.Handler.fetchBalances(tripId)
@@ -155,55 +173,46 @@ class ExpenseBalanceService:
         
         return json.dumps(formatted_data)
     
-    def _create_balance_records(self, splitList, paidBy, totalAmount, tripId, expenseId):
+    def _create_balance_records(self, splitList, paidBy, totalAmount, tripId, expenseId, commit=True):
         """
         Create balance records with correct accounting logic.
-        
-        Correct Balance Semantics:
-        - Each user who owes money gets a negative balance (-amount they owe)
-        - The payer gets positive balance for money they're owed
-        - Sum of all balances = 0 (double-entry accounting)
+
+        Each non-payer in the split gets a negative balance equal to -1 *
+        their share. The payer gets a positive balance equal to
+        (total - their share), which is what they're owed. Sum of all
+        balances per expense must equal zero.
         """
-        total_owed_to_payer = 0
-        
-        # Create balance records for each person in the split
         for split in splitList:
             user_id = split['userId']
             user_amount = split['amount']
-            
             if user_id != paidBy:
-                # User owes money (negative balance)
                 self.Handler.addBalance({
                     "tripId": tripId,
                     "userId": user_id,
                     "expenseId": expenseId,
-                    "amount": -1 * user_amount,  # Negative = owes money
+                    "amount": -1 * user_amount,
                     "borrowedFrom": paidBy,
-                })
-                total_owed_to_payer += user_amount
-        
-        # Create balance record for payer if they are owed money
+                }, commit=commit)
+
         payer_split = next((s for s in splitList if s['userId'] == paidBy), None)
         if payer_split:
-            # Payer is in the split - they are owed (total - their share)
             payer_owed = totalAmount - payer_split['amount']
             if payer_owed > 0:
                 self.Handler.addBalance({
                     "tripId": tripId,
                     "userId": paidBy,
                     "expenseId": expenseId,
-                    "amount": payer_owed,  # Positive = owed money
+                    "amount": payer_owed,
                     "borrowedFrom": paidBy,
-                })
+                }, commit=commit)
         else:
-            # Payer not in split - they are owed the full amount
             self.Handler.addBalance({
                 "tripId": tripId,
                 "userId": paidBy,
                 "expenseId": expenseId,
-                "amount": totalAmount,  # Positive = owed money
+                "amount": totalAmount,
                 "borrowedFrom": paidBy,
-            })
+            }, commit=commit)
     
     def _validate_balance_sum(self, expenseId):
         """

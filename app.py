@@ -33,7 +33,11 @@ class FlaskApp(Flask):
     def __init__(self, import_name: str):
         load_dotenv()
         super().__init__(import_name)
-        self.app = self.app_context().app
+        # `self.app` is an alias the rest of the codebase relies on. The
+        # previous version did `self.app_context().app` which created and
+        # then leaked an unpushed app context every boot. Same end value,
+        # no leaked context.
+        self.app = self
         self.logger = Logger().get_logger()
         allowed = [o.strip() for o in os.getenv(
             'CORS_ORIGINS',
