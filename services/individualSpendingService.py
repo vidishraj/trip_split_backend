@@ -14,9 +14,7 @@ class IndividualSpendingService:
         Shows how much each person actually spent (paid out of pocket).
         """
         try:
-            result = self.handler.fetchIndividualSpending(tripId)
-            logging.info(f"Retrieved individual spending for trip {tripId}")
-            return result
+            return self.handler.fetchIndividualSpending(tripId)
         except Exception as e:
             logging.error(f"Error fetching individual spending for trip {tripId}: {e}")
-            raise e
+            raise

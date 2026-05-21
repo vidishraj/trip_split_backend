@@ -26,7 +26,7 @@ def build_tools(trip_id, current_user_id, services):
     notesService = services['notesService']
     individualSpendingService = services['individualSpendingService']
 
-    MUTATIONS = {'add_expense', 'delete_expense', 'add_note'}
+    MUTATIONS = {'add_expense', 'delete_expense', 'add_note', 'record_settlement'}
 
     # ─── reads ───────────────────────────────────────────────────────
     def _list_users(_args):
@@ -148,6 +148,46 @@ def build_tools(trip_id, current_user_id, services):
         except KeyError as ke:
             return {'ok': False, 'error': f'missing required field {ke}'}
 
+    def _record_settlement(args):
+        """A settlement is just an expense where the debtor (paidBy) covers
+        the creditor's owed amount. Implemented on top of addExpenseForTrip
+        so balance accounting stays consistent.
+        """
+        try:
+            currency = (args.get('currency') or 'inr').lower()
+            from_user = int(args['fromUserId'])
+            to_user = int(args['toUserId'])
+            amount = float(args['amount'])
+            if amount <= 0:
+                return {'ok': False, 'error': 'amount must be > 0'}
+            if from_user == to_user:
+                return {'ok': False, 'error': 'fromUserId and toUserId must differ'}
+            try:
+                inr_amount = to_inr(amount, currency)
+            except ValueError as ve:
+                return {'ok': False, 'error': str(ve)}
+
+            payload = {
+                'tripId': trip_id,
+                'date': args.get('date') or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                'description': args.get('description') or 'Settlement',
+                'amount': inr_amount,
+                'paidBy': from_user,
+                'splitbw': [{'userId': to_user, 'amount': inr_amount}],
+                'selfExpense': False,
+            }
+            ok = expenseBalanceService.addExpenseForTrip(payload)
+            if not ok:
+                return {'ok': False, 'error': 'persist failed'}
+            return {
+                'ok': True,
+                'currency': currency.upper(),
+                'amount_in_inr': round(inr_amount, 2),
+                'amount_in_source': round(amount, 2),
+            }
+        except (ValueError, TypeError, KeyError) as ex:
+            return {'ok': False, 'error': str(ex)}
+
     tools = [
         (
             'list_users',
@@ -260,6 +300,28 @@ def build_tools(trip_id, current_user_id, services):
                 'required': ['note'],
             },
             _add_note,
+        ),
+        (
+            'record_settlement',
+            (
+                'Record a real-world payment between two members. Use this when the user says they '
+                'paid (or were paid) money to settle a debt — e.g. "I paid Alice ₹500 to settle up". '
+                'fromUserId is the debtor (the one handing over money), toUserId is the creditor. '
+                'amount may be in any supported currency (set `currency`); server converts to INR.'
+            ),
+            {
+                'type': 'object',
+                'properties': {
+                    'fromUserId': {'type': 'integer'},
+                    'toUserId': {'type': 'integer'},
+                    'amount': {'type': 'number', 'exclusiveMinimum': 0},
+                    'currency': {'type': 'string', 'default': 'inr'},
+                    'date': {'type': 'string'},
+                    'description': {'type': 'string', 'maxLength': 350},
+                },
+                'required': ['fromUserId', 'toUserId', 'amount'],
+            },
+            _record_settlement,
         ),
     ]
     return tools, MUTATIONS

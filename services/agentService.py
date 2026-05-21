@@ -75,6 +75,9 @@ Rules:
 - "Alice paid X, my share is Y" -> paidBy is Alice; splitBetween includes
   you with amount Y (and Alice with X - Y).
 - selfExpense=true is a personal expense logged for the bearer, no balances created.
+- When the user says they paid someone (or were paid) to settle a debt, use the
+  `record_settlement` tool, not add_expense. fromUserId is whoever handed over
+  the money; toUserId is whoever received it.
 - Default date is today (YYYY-MM-DD) unless the user specifies otherwise.
 - After making changes, reply tersely confirming what you did (mention the
   source currency AND the INR amount you persisted). After reads, summarize
