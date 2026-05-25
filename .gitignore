@@ -12,4 +12,4 @@ docs/
 migrations/
 serviceAccountKey.json
 *.log
-.envtripSplit.sql
+*.sql
