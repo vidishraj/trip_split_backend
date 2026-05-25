@@ -273,8 +273,9 @@ class TravelEP:
         try:
             payload = request.get_json()
             message = (payload.get('message') or '').strip()
-            if not message:
-                return jsonify({"Error": "Missing message."}), 400
+            images = payload.get('images') or []
+            if not message and not images:
+                return jsonify({"Error": "Missing message or image."}), 400
             history = payload.get('history') or []
             # Trip metadata for the system prompt — pulled once, no extra round-trip.
             from models import Trip
@@ -289,6 +290,7 @@ class TravelEP:
                 current_user_email=g.user_email,
                 message=message,
                 history=history,
+                images=images,
             )
             if result.get('retry_after') is not None:
                 resp = jsonify({"Message": result, "Error": result.get('error')})

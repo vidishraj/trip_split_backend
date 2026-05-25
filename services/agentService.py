@@ -40,6 +40,9 @@ MAX_HISTORY_TURNS = 10              # last N user+assistant pairs sent to the mo
 MAX_MESSAGE_CHARS = 2000            # per single message
 MAX_NAME_CHARS = 60                 # member name / trip title in system prompt
 RATE_LIMIT_REQS_PER_HOUR = 30       # per authed email
+MAX_IMAGES_PER_TURN = 4
+MAX_IMAGE_BYTES = 5 * 1024 * 1024   # 5 MB per image (before base64 expansion)
+ALLOWED_IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 
 SYSTEM_PROMPT_TEMPLATE = """You are an assistant inside TripSplit, a trip expense-splitting app.
 
@@ -78,6 +81,11 @@ Rules:
 - When the user says they paid someone (or were paid) to settle a debt, use the
   `record_settlement` tool, not add_expense. fromUserId is whoever handed over
   the money; toUserId is whoever received it.
+- If the user attaches an image (a receipt, bank statement, ticket, etc.), read
+  it carefully and extract the amount, currency, date, and any line items.
+  Prefer the currency printed on the document. If the user's accompanying text
+  gives split instructions, follow them — otherwise ask one concise question
+  before recording. Never invent details that aren't in the image or message.
 - Default date is today (YYYY-MM-DD) unless the user specifies otherwise.
 - After making changes, reply tersely confirming what you did (mention the
   source currency AND the INR amount you persisted). After reads, summarize
@@ -146,21 +154,55 @@ class TripAgentService:
         self.rate_limiter = _RateLimiter(RATE_LIMIT_REQS_PER_HOUR)
 
     def handle_message(self, app, trip_id, trip_title, currencies,
-                       current_user_email, message, history):
+                       current_user_email, message, history, images=None):
         """
         Synchronously run a single turn against Claude and return a dict:
             {reply, mutations, tool_calls, error?}
+
+        `images` is an optional list of dicts {data, media_type} where data
+        is a base-64 encoded image. They're attached to the latest user
+        turn so the model can read them as it would a typed prompt.
         """
+        images = images or []
         # Input guards.
-        if not message or not isinstance(message, str):
+        if (not message or not isinstance(message, str)) and not images:
             return {"reply": "", "mutations": [], "tool_calls": [], "error": "empty message"}
-        if len(message) > MAX_MESSAGE_CHARS:
+        if message and len(message) > MAX_MESSAGE_CHARS:
             return {
                 "reply": "",
                 "mutations": [],
                 "tool_calls": [],
                 "error": f"message too long ({len(message)} > {MAX_MESSAGE_CHARS} chars)",
             }
+        if len(images) > MAX_IMAGES_PER_TURN:
+            return {
+                "reply": "",
+                "mutations": [],
+                "tool_calls": [],
+                "error": f"too many images ({len(images)} > {MAX_IMAGES_PER_TURN})",
+            }
+        validated_images = []
+        for idx, img in enumerate(images):
+            mt = (img or {}).get('media_type', '')
+            data = (img or {}).get('data', '')
+            if mt not in ALLOWED_IMAGE_MEDIA_TYPES:
+                return {
+                    "reply": "", "mutations": [], "tool_calls": [],
+                    "error": f"image #{idx + 1} has unsupported type {mt!r}",
+                }
+            if not isinstance(data, str) or not data:
+                return {
+                    "reply": "", "mutations": [], "tool_calls": [],
+                    "error": f"image #{idx + 1} has empty data",
+                }
+            # base64-encoded length is 4/3 the binary length (modulo padding),
+            # so cap encoded length proportionally.
+            if len(data) > (MAX_IMAGE_BYTES * 4) // 3 + 16:
+                return {
+                    "reply": "", "mutations": [], "tool_calls": [],
+                    "error": f"image #{idx + 1} exceeds {MAX_IMAGE_BYTES // 1024}KB",
+                }
+            validated_images.append({"media_type": mt, "data": data})
 
         ok, retry_after = self.rate_limiter.check(current_user_email)
         if not ok:
@@ -220,7 +262,25 @@ class TripAgentService:
             allowed_tools=allowed,
         )
 
-        prompt_text = self._format_conversation(history, message)
+        prompt_text = self._format_conversation(history, message or '')
+        if validated_images:
+            # Anthropic's content-block format: image blocks first, then a
+            # final text block. The SDK / claude CLI forwards this shape
+            # verbatim to the Messages API.
+            user_content = [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": img["media_type"],
+                        "data": img["data"],
+                    },
+                }
+                for img in validated_images
+            ] + [{"type": "text", "text": prompt_text or "(see image)"}]
+        else:
+            user_content = prompt_text
+
         text_parts = []
         error = None
 
@@ -230,7 +290,7 @@ class TripAgentService:
                 yield {
                     "type": "user",
                     "session_id": "",
-                    "message": {"role": "user", "content": prompt_text},
+                    "message": {"role": "user", "content": user_content},
                     "parent_tool_use_id": None,
                 }
             async for msg in query(prompt=make_prompt(), options=options):
