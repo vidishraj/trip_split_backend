@@ -258,6 +258,38 @@ class TripAgentService:
             members_block=_format_members(users, current_user_id),
         )
 
+        # If images came in, drop them to a per-turn temp directory and ask
+        # the model to view them through the built-in Read tool. The CLI's
+        # stream-json transport doesn't forward inline image content blocks,
+        # so this is the reliable path.
+        image_dir = None
+        extra_allowed_tools: list[str] = []
+        extra_add_dirs: list[str] = []
+        image_paths_text = ''
+        EXT_BY_MT = {
+            'image/png': 'png',
+            'image/jpeg': 'jpg',
+            'image/webp': 'webp',
+            'image/gif': 'gif',
+        }
+        if validated_images:
+            image_dir = tempfile.mkdtemp(prefix=f'tripsplit-img-{uuid.uuid4().hex[:8]}-')
+            paths = []
+            for i, img in enumerate(validated_images):
+                ext = EXT_BY_MT.get(img['media_type'], 'png')
+                path = os.path.join(image_dir, f'attachment-{i + 1}.{ext}')
+                with open(path, 'wb') as f:
+                    f.write(base64.b64decode(img['data']))
+                paths.append(path)
+            image_paths_text = (
+                '\n\nThe bearer attached '
+                f'{len(paths)} image{"s" if len(paths) != 1 else ""}. '
+                'Use the Read tool to view each, then act on what you see:\n'
+                + '\n'.join(f'  - {p}' for p in paths)
+            )
+            extra_allowed_tools = ['Read']
+            extra_add_dirs = [image_dir]
+
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             mcp_servers={MCP_SERVER_NAME: mcp_server},
@@ -267,46 +299,6 @@ class TripAgentService:
             allowed_tools=allowed + extra_allowed_tools,
             add_dirs=extra_add_dirs,
         )
-
-        # If images came in, drop them to a per-turn temp directory and ask
-        # the model to view them through the built-in Read tool. The CLI's
-        # stream-json transport doesn't forward inline image content blocks,
-        # so this is the reliable path.
-        image_dir = None
-        extra_allowed_tools = []
-        extra_add_dirs = []
-        image_paths_text = ''
-        if validated_images:
-            image_dir = tempfile.mkdtemp(prefix=f'tripsplit-img-{uuid.uuid4().hex[:8]}-')
-            for i, img in enumerate(validated_images):
-                ext = {
-                    'image/png': 'png',
-                    'image/jpeg': 'jpg',
-                    'image/webp': 'webp',
-                    'image/gif': 'gif',
-                }.get(img['media_type'], 'png')
-                path = os.path.join(image_dir, f'attachment-{i + 1}.{ext}')
-                with open(path, 'wb') as f:
-                    f.write(base64.b64decode(img['data']))
-            image_paths_text = (
-                '\n\nThe bearer attached '
-                f'{len(validated_images)} image{"s" if len(validated_images) != 1 else ""}. '
-                'Use the Read tool to view each, then act on what you see:\n'
-                + '\n'.join(
-                    f'  - {os.path.join(image_dir, f"attachment-{i + 1}.{ext}")}'
-                    for i, img in enumerate(validated_images)
-                    for ext in [
-                        {
-                            'image/png': 'png',
-                            'image/jpeg': 'jpg',
-                            'image/webp': 'webp',
-                            'image/gif': 'gif',
-                        }.get(img['media_type'], 'png')
-                    ]
-                )
-            )
-            extra_allowed_tools = ['Read']
-            extra_add_dirs = [image_dir]
 
         prompt_text = self._format_conversation(history, (message or '') + image_paths_text)
         user_content = prompt_text
