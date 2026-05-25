@@ -8,10 +8,15 @@ async tool handlers, because the SDK invokes tools from a worker task
 that doesn't share Flask's request context (and our DB session lives
 on flask.g).
 """
+import base64
 import json
 import logging
+import os
 import re
+import shutil
+import tempfile
 import time
+import uuid
 from collections import deque
 from threading import Lock
 
@@ -259,27 +264,52 @@ class TripAgentService:
             permission_mode="bypassPermissions",
             max_turns=MAX_TURNS,
             model=MODEL,
-            allowed_tools=allowed,
+            allowed_tools=allowed + extra_allowed_tools,
+            add_dirs=extra_add_dirs,
         )
 
-        prompt_text = self._format_conversation(history, message or '')
+        # If images came in, drop them to a per-turn temp directory and ask
+        # the model to view them through the built-in Read tool. The CLI's
+        # stream-json transport doesn't forward inline image content blocks,
+        # so this is the reliable path.
+        image_dir = None
+        extra_allowed_tools = []
+        extra_add_dirs = []
+        image_paths_text = ''
         if validated_images:
-            # Anthropic's content-block format: image blocks first, then a
-            # final text block. The SDK / claude CLI forwards this shape
-            # verbatim to the Messages API.
-            user_content = [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": img["media_type"],
-                        "data": img["data"],
-                    },
-                }
-                for img in validated_images
-            ] + [{"type": "text", "text": prompt_text or "(see image)"}]
-        else:
-            user_content = prompt_text
+            image_dir = tempfile.mkdtemp(prefix=f'tripsplit-img-{uuid.uuid4().hex[:8]}-')
+            for i, img in enumerate(validated_images):
+                ext = {
+                    'image/png': 'png',
+                    'image/jpeg': 'jpg',
+                    'image/webp': 'webp',
+                    'image/gif': 'gif',
+                }.get(img['media_type'], 'png')
+                path = os.path.join(image_dir, f'attachment-{i + 1}.{ext}')
+                with open(path, 'wb') as f:
+                    f.write(base64.b64decode(img['data']))
+            image_paths_text = (
+                '\n\nThe bearer attached '
+                f'{len(validated_images)} image{"s" if len(validated_images) != 1 else ""}. '
+                'Use the Read tool to view each, then act on what you see:\n'
+                + '\n'.join(
+                    f'  - {os.path.join(image_dir, f"attachment-{i + 1}.{ext}")}'
+                    for i, img in enumerate(validated_images)
+                    for ext in [
+                        {
+                            'image/png': 'png',
+                            'image/jpeg': 'jpg',
+                            'image/webp': 'webp',
+                            'image/gif': 'gif',
+                        }.get(img['media_type'], 'png')
+                    ]
+                )
+            )
+            extra_allowed_tools = ['Read']
+            extra_add_dirs = [image_dir]
+
+        prompt_text = self._format_conversation(history, (message or '') + image_paths_text)
+        user_content = prompt_text
 
         text_parts = []
         error = None
@@ -308,6 +338,10 @@ class TripAgentService:
         except Exception as ex:
             logger.exception("Agent SDK run failed")
             error = f"{type(ex).__name__}: {ex}"
+        finally:
+            # Always remove the per-turn image dir so /tmp doesn't fill up.
+            if image_dir and os.path.isdir(image_dir):
+                shutil.rmtree(image_dir, ignore_errors=True)
 
         return {
             "reply": "".join(text_parts).strip(),
