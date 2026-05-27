@@ -12,13 +12,14 @@ _tripId_from_json_body = lambda r: ((r.get_json(silent=True) or {}).get('body') 
 class TravelEP:
 
     def __init__(self, tripUserService, expenseBalanceService, notesService,
-                 individualSpendingService, agentService=None):
+                 individualSpendingService, agentService=None, chatHandler=None):
         self.logging = Logger().get_logger()
         self.tripUserService = tripUserService
         self.expenseBalanceService = expenseBalanceService
         self.notesService = notesService
         self.individualSpendingService = individualSpendingService
         self.agentService = agentService
+        self.chatHandler = chatHandler
 
     """ Trip EPs """
 
@@ -276,12 +277,36 @@ class TravelEP:
             images = payload.get('images') or []
             if not message and not images:
                 return jsonify({"Error": "Missing message or image."}), 400
-            history = payload.get('history') or []
+
             # Trip metadata for the system prompt — pulled once, no extra round-trip.
             from models import Trip
             trip_row = g.db.session.query(Trip).filter_by(tripIdShared=g.trip_id).first()
             trip_title = trip_row.tripTitle if trip_row else g.trip_id
             currencies = trip_row.currencies.split(',') if trip_row and trip_row.currencies else []
+
+            # Persist the user turn before invoking the model so even if the
+            # model call fails, the trip's transcript still has what was sent.
+            user_id = self.tripUserService.fetchUserIDFromEmail(g.user_email)
+            user_msg_id = None
+            if self.chatHandler is not None:
+                user_msg_id = self.chatHandler.append(
+                    trip_id=g.trip_id,
+                    user_id=user_id,
+                    role='user',
+                    content=message or '(image only)',
+                    image_count=len(images),
+                )
+
+            # Pull recent transcript from the DB — the model sees the trip's
+            # shared history, not whatever the client claims.
+            history = []
+            if self.chatHandler is not None:
+                history = self.chatHandler.fetch_recent_for_model(g.trip_id, limit=20)
+                # Drop the just-written user turn since handle_message will
+                # tack the current `message` on as the latest input itself.
+                if history and history[-1].get('role') == 'user':
+                    history = history[:-1]
+
             result = self.agentService.handle_message(
                 app=current_app._get_current_object(),
                 trip_id=g.trip_id,
@@ -297,11 +322,45 @@ class TravelEP:
                 resp.status_code = 429
                 resp.headers['Retry-After'] = str(result['retry_after'])
                 return resp
+
+            # Persist the assistant turn (or a stub error so the user can see
+            # something went wrong without losing the trail).
+            if self.chatHandler is not None:
+                reply_text = result.get('reply') or (
+                    f"(no reply — {result['error']})" if result.get('error') else '(no reply)'
+                )
+                assistant_msg_id = self.chatHandler.append(
+                    trip_id=g.trip_id,
+                    user_id=None,
+                    role='assistant',
+                    content=reply_text,
+                    image_count=0,
+                )
+                result['userMessageId'] = user_msg_id
+                result['assistantMessageId'] = assistant_msg_id
+
             status = 500 if result.get('error') else 200
             return jsonify({"Message": result}), status
         except Exception as ex:
             self.logging.error(f"Error in chat: {ex}")
             return jsonify({"Error": f"Error in chat: {ex}"}), 500
+
+    @require_auth
+    @require_trip_auth(_trip_from_arg)
+    def getChatHistory(self):
+        if self.chatHandler is None:
+            return jsonify({"Message": []}), 200
+        try:
+            limit = request.args.get('limit', '200')
+            try:
+                limit_int = max(1, min(int(limit), 500))
+            except ValueError:
+                limit_int = 200
+            messages = self.chatHandler.fetch_for_trip(g.trip_id, limit=limit_int)
+            return jsonify({"Message": messages}), 200
+        except Exception as ex:
+            self.logging.error(f"Error fetching chat history: {ex}")
+            return jsonify({"Error": f"Error fetching chat history: {ex}"}), 500
 
     @require_auth
     @require_trip_auth(_tripId_from_arg)

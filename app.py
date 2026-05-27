@@ -7,6 +7,7 @@ from dbHandlers.expenseBalanceHandler import ExpenseBalanceHandler
 from dbHandlers.noteHandler import NotesHandler
 from dbHandlers.tripUserHandler import TripUserHandler
 from dbHandlers.individualSpendingHandler import IndividualSpendingHandler
+from dbHandlers.chatHandler import ChatHandler
 from services.expenseBalanceService import ExpenseBalanceService
 from services.notesService import NotesService
 from services.tripUserService import TripUserService
@@ -68,16 +69,18 @@ class FlaskApp(Flask):
         expenseBalanceHandler = ExpenseBalanceHandler()
         notesHandler = NotesHandler()
         individualSpendingHandler = IndividualSpendingHandler()
+        chatHandler = ChatHandler()
         tripUserService = TripUserService(tripUserHandler)
         expenseBalanceService = ExpenseBalanceService(expenseBalanceHandler)
         notesService = NotesService(notesHandler)
         individualSpendingService = IndividualSpendingService(individualSpendingHandler)
         agentService = TripAgentService(
-            tripUserService, expenseBalanceService, notesService, individualSpendingService
+            tripUserService, expenseBalanceService, notesService,
+            individualSpendingService, chatHandler,
         )
         self.travelEP = TravelEP(
             tripUserService, expenseBalanceService, notesService,
-            individualSpendingService, agentService,
+            individualSpendingService, agentService, chatHandler,
         )
 
     def _setup_hooks(self):
@@ -158,6 +161,7 @@ class FlaskApp(Flask):
         self.app.add_url_rule('/getNotes', methods=['GET'], view_func=self.travelEP.fetchNotesForATrip)
         # Assistant EP
         self.app.add_url_rule('/chat', methods=['POST'], view_func=self.travelEP.chat)
+        self.app.add_url_rule('/getChatHistory', methods=['GET'], view_func=self.travelEP.getChatHistory)
 
     def run_app(self):
         self.logger.info("Starting Trip Split...")

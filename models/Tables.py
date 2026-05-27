@@ -85,3 +85,33 @@ class UserTrip(Base):
 
     def __repr__(self):
         return f"<UserTrip userId={self.userId} tripId={self.tripId}>"
+
+
+class ChatMessage(Base):
+    """A single turn in the trip's shared assistant conversation.
+
+    The conversation lives at the trip level, not the user level — every
+    member sees the same transcript. `userId` attributes a user turn to
+    whoever sent it (null for assistant turns). Images are not stored;
+    only the count is kept so the UI can still show "(N images)".
+    """
+    __tablename__ = 'chatMessages'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tripId = Column(
+        String(6),
+        ForeignKey('trips.tripIdShared', ondelete='CASCADE'),
+        nullable=False,
+    )
+    userId = Column(
+        Integer,
+        ForeignKey('users.userId', ondelete='SET NULL'),
+        nullable=True,
+    )
+    role = Column(String(16), nullable=False)   # 'user' | 'assistant'
+    content = Column(Text, nullable=False)
+    imageCount = Column(Integer, nullable=False, default=0)
+    createdAt = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<ChatMessage trip={self.tripId} role={self.role}>"
